@@ -20,7 +20,7 @@ struct {
 
 上述例子的结构体有三个字段。`title` 和 `author` 字段的类型是 `string`， `pages` 的类型是 `int`。
 
-有些文章会将字段称为成员变量。
+在某些文章会将字段称为成员变量。
 
 相同类型的字段可以放在一起同时声明：
 
@@ -31,7 +31,7 @@ struct {
 }
 ```
 
-结构体的大小是其所有字段类型的大小之和。 空结构体类型的大小恒为0。
+结构体的大小是其所有字段类型的大小之和。 **空结构体类型的大小恒为0**。
 
 声明结构体时， 每个字段都可以声明一个标签。 字段标签是可选的， 字段标签的默认值是空字符串。
 
@@ -48,7 +48,7 @@ struct {
 
 （顺便说下，标签中的 `omitempty` 单词表示如果该字段的值为零值或者是空容器值， 则在JSON文本中不会显示该字段。）
 
-将字段标签作为注释不是一个好主意。
+不建议将字段标签作为注释。
 
 实践中， 原始的字符串字面量 **\`...\`** 比解释型字符串字面量 `"..."` 更受欢迎。
 
@@ -58,7 +58,7 @@ struct {
 
 只有可导出（大写开头）的结构体类型中的可导出的字段才能被其他包导入使用。
 
-字段的标签和字段之间的顺序对于结构体类型来说非常重要。 两个未命名的结构体必须在其具有相同字段声明顺序的前提下才是相等的。 两个字段只有在其具有相同的名称、字段类型、标签的前提下才相等。 需要注意的是： **来自不同包的两个未导出的结构体字段名称始终被视为两个不同的名称**。
+字段的标签和字段之间的顺序对于结构体类型来说非常重要。 两个未命名的结构体必须在其具有相同字段声明顺序的前提下才有可能是相等的。 两个字段只有在其具有相同的名称、字段类型、标签的前提下才相等。 需要注意的是： **来自不同包的两个未导出的结构体字段名称始终被视为两个不同的名称**。
 
 ## 结构体值字面量和结构体值操作
 
@@ -136,7 +136,172 @@ func f() {
 }
 ```
 
-只有当两个结构体值得类型相同或者两个结构体值得类型具有相同的基类型（需要考虑字段标签）并且这两个类型中的至少一个是[非定义类型](https://go101.org/article/type-system-overview.html#non-defined-type)时， 才能将两个结构体值分配给彼此。
+只有当两个结构体值得类型相同或者两个结构体值得类型具有相同的基本类型（需要考虑字段标签）并且这两个类型中的至少一个是[非定义类型](https://go101.org/article/type-system-overview.html#non-defined-type)时， 才能将两个结构体值分配给彼此。
 
 
 ## 结构体字段的可寻址性
+
+可寻址的结构体的字段的值也是可以寻址的。 反之， 不可寻址的结构体的字段的值也不可以寻址。不可寻址的结构体的字段无法被修改。 所有的复合字面量，包括结构体复合字面量都是不可寻址的。
+
+例子：
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	type Book struct {
+		Pages int
+	}
+	var book = Book{} // book is addressable
+	p := &book.Pages  // take the address of the "Pages" field
+	*p = 123
+	fmt.Println(book) // {123}
+
+	/*
+	Book{}.Pages = 123 // This line doesn't compile,
+	                   // for "Book{}" is unaddressable.
+	*/
+}
+```
+
+## 复合字面量虽然不能寻址， 但却可以拥有地址
+
+通常来说， 只有可寻址的值才能拥有地址。 但是Go中却有一个语法糖，它允许复合字面量拥有地址。
+
+例子：
+
+```go
+package main
+
+func main() {
+	type Book struct {
+		Pages int
+	}
+	// Book{100} is unaddressable but can be taken address.
+	p := &Book{100} // <=> tmp := Book{100}; p := &tmp
+	p.Pages = 200
+	// The following line fails to compile.
+	// The reason is Book{100} is not addressable,
+	// so its field, Pages, is also not addressable,
+	/*
+	_ = &Book{100}.Pages
+	*/
+}
+```
+
+## 像结构体值一样使用结构体指针
+
+不同于C语言， 在Go语言里， 没有类似 `->` 这样的操作符通过结构体指针来访问结构体字段。 在Go里， 结构体字段的访问操作符仍然是点操作符：`.`。
+
+例子：
+
+```go
+package main
+
+func main() {
+	type Book struct {
+		pages int
+	}
+	book1 := &Book{100} // book1 is a poiner.
+	book2 := new(Book)  // book2 is another pointer.
+	book2.pages = book1.pages
+}
+```
+
+## 关于结构体值的比较操作
+
+大多数的结构体类型都是可比较的， 除了那些有[无法比较的类型](https://go101.org/article/type-system-overview.html#types-not-support-comparison)字段的结构体类型。当比较两个相同类型的结构体类型， 将会对其相应的字段进行比较。只有当所有相关的字段都相等的时候， 结构体值才相等。
+
+只有当两个结构体值能够互相赋值的情况下才能够互相比较。
+
+## 关于结构体值的转换
+
+当两个结构体类型的值 `S1` 和 `S2` 共享相同的基本类型时（这里可以忽略字段标签）那么它们可以互相进行转换。 特别地， 如果 `S1` 或 `S2` 是[未定义类型]()且它们的基本类型是相同的， 那么它们之间的转换是隐式的。
+
+下面的代码片段给定了5个结构体类型 `S0` `S1` `S2` `S3` 和 `S4`，
+
+- 类型 `S0` 的值不能转换成其他4种类型， 反之亦然， 因为它们相对应的字段名称不同。
+
+- `S1` `S2` `S3` 和 `S4` 之间可以两两互相转换。
+
+特别地，
+
+- 类型 `S2` 的值可以隐式的转换成类型 `S3`， 反之亦然。
+
+- 类型 `S2` 的值可以隐式的转换成类型 `S4`， 反之亦然。
+
+但是，
+
+- 类型 `S1` 的值必须显式地转换成类型 `S2`， 反之亦然。
+
+- 类型 `S3` 的值可以显式地转换成类型 `S4`， 反之亦然。
+
+
+```go
+package main
+
+type S0 struct {
+	y int "foo"
+	x bool
+}
+
+type S1 = struct { // S1 is a (non-defined) alias type
+	x int "foo"
+	y bool
+}
+
+type S2 = struct { // S2 is a (non-defined) alias type
+	x int "bar"
+	y bool
+}
+type S3 S2 // S3 is a defined type
+type S4 S3 // S4 is a defined type
+
+var v0, v1, v2, v3, v4 = S0{}, S1{}, S2{}, S3{}, S4{}
+func f() {
+	v1 = S1(v2); v2 = S2(v1)
+	v1 = S1(v3); v3 = S3(v1)
+	v1 = S1(v4); v4 = S4(v1)
+	v2 = v3; v3 = v2 // the conversions can be implicit
+	v2 = v4; v4 = v2 // the conversions can be implicit
+	v3 = S3(v4); v4 = S4(v3)
+}
+```
+
+实际上， 只有当其中一个结构体值可以隐式地转换成另一个结构体类型时， 它们才能够彼此分配（或比较）。
+
+
+## 匿名结构体
+
+允许使用匿名结构体类型作为另一个结构体类型的字段类型。 匿名结构体字面量同样可以在复合字面量中使用。
+
+一个例子：
+
+```go
+var aBook = struct {
+	author struct {
+		firstName, lastName string
+		gender              bool
+	}
+	title string
+	pages int
+}{
+	author: struct {
+		firstName, lastName string
+		gender              bool
+	}{
+		firstName: "Mark",
+		lastName: "Twain",
+	},
+	title: "The Million Pound Note",
+	pages: 96,
+}
+```
+
+通常来说， 一般不推荐使用在复合字面量中使用匿名结构体。
+
+## 关于结构体类型的更多内容
+
+还有一些关于结构体的高级话题，后面的文章： [type embedding](https://go101.org/article/type-embedding.html) 和 [memory layout](https://go101.org/article/memory-layout.html#size-and-padding) 将会提到这些概念。
