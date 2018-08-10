@@ -1035,3 +1035,262 @@ func main() {
 persons: &[{Alice 28} {Jack 25}]
 */
 ```
+
+如果我们将上述例子中的数组替换成切片，然后我们在迭代期间修改切片将会影响到迭代。但是修改迭代变量仍然对被迭代的切片没有任何影响。
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	type Person struct {
+		name string
+		age  int
+	}
+	persons := []Person {{"Alice", 28}, {"Bob", 25}} // a slice
+	for i, p := range persons {
+		fmt.Println(i, p)
+		// Now this modification has effects on the iteration.
+		persons[1].name = "Jack"
+		// This modification still has no any real effects.
+		p.age = 31
+	}
+	fmt.Println("persons:", &persons)
+}
+
+// output
+/*
+0 {Alice 28}
+1 {Jack 25}
+persons: &[{Alice 28} {Jack 25}]
+*/
+```
+
+下面是一个解释第2点和第3点的例子：
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	langs := map[struct{ dynamic, strong bool }]map[string]int{
+		{true, false}:  {"JavaScript": 1995},
+		{false, true}:  {"Go": 2009},
+		{false, false}: {"C": 1972},
+	}
+	// The key type and element type of this map are both
+	// pointer types. Some weird, just for education purpose.
+	m0 := map[*struct{ dynamic, strong bool }]*map[string]int{}
+	for category, langInfo := range langs {
+		m0[&category] = &langInfo
+		// This following line has no real effects on langs.
+		category.dynamic, category.strong = true, true
+	}
+	m1 := map[struct{ dynamic, strong bool }]map[string]int{}
+	for category, langInfo := range m0 {
+		m1[*category] = *langInfo
+	}
+	// m0 and m1 both contain only one entry.
+	fmt.Println(len(m0), len(m1), m1)
+	for category, langInfo := range langs {
+		fmt.Println(category, langInfo)
+}
+
+// output:
+/*
+1 1 map[{true true}:map[C:1972]]
+{true false} map[JavaScript:1995]
+{false true} map[Go:2009]
+{false false} map[C:1972]
+*/
+```
+
+拷贝切片和map的代价很小， 但是拷贝一个超大的数组的代价也会非常的大。 所以，通常来说，迭代一个大型的数组并不是一个好主意。我们可以迭代一个从数组派生出的切片，或者迭代一个大型数组的指针。
+
+对于一个数组或切片来说，如果它的元素类型的大小很大， 那么，通常来说，那么在每次的迭代中使用第二个迭代变量来存储迭代的值可能不是一个好主意。对于这样的数组和切片， 我们应该使用**单迭代变量**`for-range`迭代形式的变种或者使用传统的`for`循环来迭代它们的元素。在下面的例子中，函数`fa`中的循环效率比函数`fb`循环效率低得多。
+
+```go
+type Buffer struct {
+	start, end int
+	data       [1024]byte
+}
+
+func fa(buffers []Buffer) int {
+	numUnreads := 0
+	for _, buf := range buffers {
+		numUnreads += buf.end - buf.start
+	}
+	return numUnreads
+}
+
+func fb(buffers []Buffer) int {
+	numUnreads := 0
+	for i := range buffers {
+		numUnreads += buffers[i].end - buffers[i].start
+	}
+	return numUnreads
+}
+```
+
+## 使用数组指针作为数组
+
+很多时候，我们可以使用数组指针来代替数组。
+
+我们可以遍历指向数组的指针来迭代数组的元素。对于大型数组来说，这种方式很高效，拷贝一个指针比拷贝一个大型数组高效的多。下面的例子中， 两个循环代码块的效率是相同的。
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	var a [100]int
+
+	for i, n := range &a { // copying a pointer is cheap
+		fmt.Println(i, n)
+	}
+
+	for i, n := range a[:] { // copying a slice is cheap
+		fmt.Println(i, n)
+	}
+}
+```
+
+当迭代一个`nil`的数组指针会panic。下面的例子中， 最后一个迭代的例子将会产生panic。
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	var p *[5]int // nil
+
+	for i, _ := range p { // okay
+		fmt.Println(i)
+	}
+
+	for i := range p { // okay
+		fmt.Println(i)
+	}
+
+	for i, n := range p { // panic  because p is a nil pointer for array
+		fmt.Println(i, n)
+	}
+}
+```
+
+数组指针也可以用作索引数组元素，通过`nil`数组指针来索引数组元素会产生panic。
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	a := [5]int{2, 3, 5, 7, 11}
+	p := &a
+	p[0], p[1] = 17, 19
+	fmt.Println(a) // [17 19 5 7 11]
+	p = nil
+	p[0] = 31 // panic
+}
+```
+
+我们也可以从一个数组指针派生出一个切片。从`nil`数组指针派生切片将会产生panic。
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	pa := &[5]int{2, 3, 5, 7, 11}
+	s := pa[1:3]
+	fmt.Println(s) // [3 5]
+	pa = nil
+	s = pa[1:3] // panic
+}
+```
+
+我们也可以将数组指针作为参数传递给内建函数`len`和`cap`。 传递`nil`数组指给这两个函数不会产生panic。
+
+
+## `memclr`优化
+
+假设`t0`是类型`T`零值的字面量表示，并且`a`是一个元素类型为`T`的数组，那么Go编译器会将下面的单一迭代变量`for-range`循环代码块：
+
+```go
+for i := range a {
+  a[i] = t0
+}
+```
+
+转换成一个[internal `memclr` call](https://github.com/golang/go/issues/5373)，通常比逐个重置每个元素更快。
+
+当被遍历的容器是切片时，上述的优化同样可以工作。但是， 当被遍历的容器类型是数组指针时，这种优化却不能工作。
+所以，如果你想重置一个数组，就不能迭代它的指针。实际上，推荐的方式是迭代从这个数组派生出的切片。像下面这样：
+
+```go
+s := a[:]
+for i := range s {
+	s[i] = t0
+}
+```
+
+这么建议的原因是因为可能其他的Go编译器可能不进行上述优化，并且正如上说提到的，迭代一个数组将会产生一个数组的拷贝。
+
+
+## 对内建函数`len`和`cap`的调用可能会在编译期间被求值
+
+如果传递给内建函数`len`或`cap`的参数是一个数组或数组指针，那么这个调用将会在编译期被求值，并且求值的结果是一个类型化的常量（typed constant），默认类型为内置类型`int`。这个结果会被绑定一个命名常量上。例子：
+
+```go
+package main
+
+import "fmt"
+
+var a [5]int
+var p *[7]string
+
+// N and M are both typed constants.
+const N = len(a)
+const M = cap(p)
+
+func main() {
+	fmt.Println(N) // 5
+	fmt.Println(M) // 7
+}
+```
+
+## 单独修改切片的长度和容量属性
+
+正如上面提到的，通常，一个切片的长度和容量值不能被单独地修改。一个切片值只能通过为其分配另一个切片值来进行整体地覆盖。但是，我们可以通过反射机制来单独修改切片的长度和容量值。
+
+例子：
+
+```go
+package main
+
+import (
+	"fmt"
+	"reflect"
+)
+
+func main() {
+	s := make([]int, 2, 6)
+	fmt.Println(len(s), cap(s)) // 2 6
+
+	reflect.ValueOf(&s).Elem().SetLen(3)
+	fmt.Println(len(s), cap(s)) // 3 6
+
+	reflect.ValueOf(&s).Elem().SetCap(5)
+	fmt.Println(len(s), cap(s)) // 3 5
+}
+```
+
+传递给函数`reflect.SetLen`的参数必须要小于等于参数切片`s`当前的容量值。传递给函数`reflect.SetCap`的参数必须要不小于参数切片`s`当前的长度值且要大于参数切片`s`当前的容量值。
+
+反射操作是非常低效的， 甚至比切片分配赋值操作还慢。
