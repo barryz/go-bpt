@@ -196,9 +196,9 @@ func main() {
 
 如上所述，接口值的动态类型的信息也存储在（更准确地来说，是由其引用）接口值中。动态类型信息对于在Go中实现的两个重要功能至关重要。
 
-  - 动态类型信息包括方法表，该方法表存储了由接口类型指定的，并为该接口类型的动态类型声明的所有相应的方法。这个表是Go中实现[多态](https://go101.org/article/interface.html#polymorphism)的关键。
+- 动态类型信息包括方法表，该方法表存储了由接口类型指定的，并为该接口类型的动态类型声明的所有相应的方法。这个表是Go中实现[多态](https://go101.org/article/interface.html#polymorphism)的关键。
 
-  - 动态类型信息还包括有关动态类型的各种其他信息，例如该动态类型属于什么[kind](https://go101.org/article/type-system-overview.html#type-kinds)，和该动态类型的方法和字段列表，等等。这个信息是Go中实现[反射](https://go101.org/article/interface.html#reflection)的关键。
+- 动态类型信息还包括有关动态类型的各种其他信息，例如该动态类型属于什么[kind](https://go101.org/article/type-system-overview.html#type-kinds)，和该动态类型的方法和字段列表，等等。这个信息是Go中实现[反射](https://go101.org/article/interface.html#reflection)的关键。
 
 在运行时，所有类型的信息项目存储在全局区域中。每个接口值只保存对一个类型信息项的引用。每个非接口与接口类型实现的关系对应于一个全局方法表。对标准Go运行时和编译器来说，一个方法表只会在需要的时候才会被创建。
 
@@ -318,10 +318,10 @@ keep multiples of 3:
 
 Go中涉及到接口值的转换案例有四种：
 
-	1. 将一个非接口值转换成接口值，当非接口值必须实现了接口值的类型。
-	2. 将一个接口值转换成接口值，当源接口值必须实现了目标接口的类型。
-	3. 将一个接口值转换成非接口值，无论非接口值是否实现了接口值的类型。
-	4. 将一个接口值转换成接口值，无论源接口值是否实现了目标接口值的类型。
+1. 将一个非接口值转换成接口值，当非接口值必须实现了接口值的类型。
+2. 将一个接口值转换成接口值，当源接口值必须实现了目标接口的类型。
+3. 将一个接口值转换成非接口值，无论非接口值是否实现了接口值的类型。
+4. 将一个接口值转换成接口值，无论源接口值是否实现了目标接口值的类型。
 
 上文已经介绍了头两种转换案例。这两种案例都要求源值类型必须实现了目标接口类型。这类的转换在编译期间就能确定。
 
@@ -329,14 +329,14 @@ Go中涉及到接口值的转换案例有四种：
 
 类型断言的表达式形式是`i.(T)`，`i`是一个接口值，而`T`是一个：
 
-	- 必须实现了`i`的类型的费接口值，
-	- 或是任意的接口类型。
+- 必须实现了`i`的类型的费接口值，
+- 或是任意的接口类型。
 
 在类型断言`i.(T)`中，`i`被称为被断言值，`T`被称作被断言类型。一个类型断言可以成功或失败。
 
-	- 如果`T`是一个非接口类型，那么类型断言的目的是获取一个（副本/拷贝）被装箱进接口值的动态值。`T`必须是`i`的动态类型才能确保断言成功。每个这样的转换操作都可以被看作是一个值开箱尝试。
+- 如果`T`是一个非接口类型，那么类型断言的目的是获取一个（副本/拷贝）被装箱进接口值的动态值。`T`必须是`i`的动态类型才能确保断言成功。每个这样的转换操作都可以被看作是一个值开箱尝试。
 
-	- 如果`T`是一个接口类型，那么类型断言的目的就是使得被装箱进接口值的动态值也被装箱进另一个类型`T`的接口值中。`i`的动态类型必须能转换成接口类型`T`以确保断言成功。换句话说，`i`的动态类型必须实现了接口类型`T`以确保断言成功。
+- 如果`T`是一个接口类型，那么类型断言的目的就是使得被装箱进接口值的动态值也被装箱进另一个类型`T`的接口值中。`i`的动态类型必须能转换成接口类型`T`以确保断言成功。换句话说，`i`的动态类型必须实现了接口类型`T`以确保断言成功。
 
 对于大多数的场景，类型断言操作将会产生一个被断言类型的值，类型断言被看作是一个单值表达式。然而，当一个类型断言在值分配中被当做源值表达式使用时，该类型断言会被看作是一个多值表达式，第二个结果值是无类型的布尔值，用来表明类型断言是否成功。
 
@@ -522,10 +522,10 @@ func main() {
 
 关于类型切换的一些细节：
 
-	- 不同于普通的`switch-case`代码块，`fallthrough`语句不能在类型切换代码块中的分支使用。
-	- 和普通的`switch-case`代码块一样，如果指定了`default`分支，那这个默认分支可以出现在类型切换代码块中的任何位置。
-	- 如果我们不关心在类型切换中被断言的值，我们可以使用短形式`switch x.(type) {...}`代替。
-	- 和普通的`switch-case`代码块一样，零个或多个分支可以出现在类型切换代码块中。一个没有分支的类型切换代码块，`switch a.(type) {}`在运行时是没有任何操作（影响）的。
+- 不同于普通的`switch-case`代码块，`fallthrough`语句不能在类型切换代码块中的分支使用。
+- 和普通的`switch-case`代码块一样，如果指定了`default`分支，那这个默认分支可以出现在类型切换代码块中的任何位置。
+- 如果我们不关心在类型切换中被断言的值，我们可以使用短形式`switch x.(type) {...}`代替。
+- 和普通的`switch-case`代码块一样，零个或多个分支可以出现在类型切换代码块中。一个没有分支的类型切换代码块，`switch a.(type) {}`在运行时是没有任何操作（影响）的。
 
 
 ## 更多关于Go中的接口
@@ -580,8 +580,8 @@ interface {
 
 涉及比较的接口值有两种情况:
 
-	1. 非接口值和接口值之间的比较。
-	2. 两个接口值之间的比较。
+1. 非接口值和接口值之间的比较。
+2. 两个接口值之间的比较。
 
 对于第一种情况，非接口值的类型必须实现了接口值的类型（假设它是`I`），所以这个非接口值可以转换成（装箱进）一个`I`的接口值。这就意味着一个非接口类型值和接口类型值之间的比较可以转换成两个接口值之间的比较。所以下面仅会解释两个接口值之间的比较。
 
@@ -589,11 +589,111 @@ interface {
 
 比较两个接口值的步骤（使用`==`操作符）：
 
-	1. 如果两个接口值其一是一个`nil`接口值，则比较结果取决于另一个接口值是否也是`nil`接口值。
-	2. 如果两个接口值的动态类型是不同的类型，那么它们比较的接口恒为`false`。
-	3. 对于两个接口值的动态类型是相同的类型，
+1. 如果两个接口值其一是一个`nil`接口值，则比较结果取决于另一个接口值是否也是`nil`接口值。
+2. 如果两个接口值的动态类型是不同的类型，那么它们比较的接口恒为`false`。
+3. 对于两个接口值的动态类型是相同的类型，
 
-		- 如果相同的类型是一个[不可比较类型](https://go101.org/article/value-conversions-assignments-and-comparisons.html#comparison-rules)，那么将会发生panic。
-		- 否则，比较结果就是这两个接口值动态值的比较结果。
+	- 如果相同的类型是一个[不可比较类型](https://go101.org/article/value-conversions-assignments-and-comparisons.html#comparison-rules)，那么将会发生panic。
+	- 否则，比较结果就是这两个接口值动态值的比较结果。
 
 简单来说，两个接口类型只有当它们各自的动态类型和动态值都相等时才相等，且它们的动态值必须是可比较的。
+
+根据上述的规则来看，两个动态值同为`nil`的接口值不一定是相等的。 例子：
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	var a, b, c interface{} = "abc", 123, "a"+"b"+"c"
+	fmt.Println(a == b) // a case of step 3. Print "false".
+	fmt.Println(a == c) // a case of step 3. Print "true".
+
+	var x *int = nil
+	var y *bool = nil
+	var ix, iy interface{} = x, y
+	var i interface{} = nil
+	fmt.Println(ix == iy) // false
+	fmt.Println(ix == i)  // false
+	fmt.Println(ix == i)  // false
+
+	var s []int = nil // []int is an uncomparable type
+	i = s
+	fmt.Println(i == nil) // a case of step 1. Print "false".
+	fmt.Println(i == i)   // a case of step 2. Will panic.
+}
+```
+
+### 接口值的内部结构
+
+对于官方的Go编译器/运行时来说，空接口和非空接口值是使用两种不同的内部结构来表示的。请阅读[value parts](https://go101.org/article/value-part.html#interface-structure)以获取更多内容。
+
+### 指针动态值和非指针动态值
+
+官方的Go编译器/运行时做了一个优化，使得将指针值装箱进接口值比非指针值装箱进接口值更加高效。对于[小尺寸值](https://go101.org/article/value-copy-cost.html)，这种效率上的差异很小，但是对于大尺寸值，效率差异可能会很大。对于相同的优化，如果基类型是大尺寸类型，则使用指针类型的类型断言也比具有指针类型的基类型的类型断言更有效。
+
+**所以应该避免将大尺寸值装箱进接口值，应该使用指针值代替**。
+
+### `[]T`的值不能直接转换为`[]I`，即使类型`T`实现了接口类型`I`.
+
+例如，有时，我们可能需要将[]string值转换成[]interface类型。不同于其他的编程语言，Go中并没有直接的方式进行这样的转换。我们必须在一个循环中手动地进行转换：
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	words := []string{
+		"Go", "is", "a", "high",
+		"efficient", "language.",
+	}
+
+	// The prototype of fmt.Println function is
+	// func Println(a ...interface{}) (n int, err error).
+	// So words... can't be passed to it as the argument.
+
+	// fmt.Println(words...) // not compile
+
+	// Convert the []string value to []interface{}.
+	iw := make([]interface{}, 0, len(words))
+	for _, w := range words {
+		iw = append(iw, w)
+	}
+	fmt.Println(iw...) // compiles okay
+}
+```
+
+## 每个在接口类型中指定的方法都对应一个隐式的函数
+
+对于由接口类型`I`定义的方法集中的每个名为`m`的方法，编译器将隐式地声明一个名为`I.m`的函数，它具有多个参数，第一个参数是类型I的值本身，类似于其他语言中的`this`。额外的参数就是`I.m`中的输入参数。函数调用`I.m(i, ...)`等价于方法调用`i.m(...)`。
+
+例子：
+
+```go
+package main
+
+import "fmt"
+
+type I interface {
+	m(int)bool
+}
+
+type T string
+func (t T) m(n int) bool {
+	return len(t) > n
+}
+
+func main() {
+	var i I = T("gopher")
+	fmt.Println (i.m(5))                         // true
+	fmt.Println (I.m(i, 5))                      // true
+	fmt.Println (interface {m(int) bool}.m(i, 5)) // true
+
+	// The following lines compile okay, but will panic at run time.
+	I(nil).m(5)
+	I.m(nil, 5)
+	interface {m(int) bool}.m(nil, 5)
+}
+```
