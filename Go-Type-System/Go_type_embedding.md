@@ -217,4 +217,247 @@ func main() {
 
 这也就是为什么上节中表达式`gaga.Name`合法的原因。这个表达式仅仅是`gaga.Person.Name`缩写形式。
 
- 
+因为任何被嵌入的类型都必须是结构体类型，文章[structs in Go](https://go101.org/article/struct.html)中已经提到了一个可寻址的结构体值可以通过该结构体值的指针访问。所以下面的代码在Go中也是合法的。
+
+```go
+func main() {
+	var c C
+	pc = &c
+
+	// The following 4 lines are equivalent.
+	fmt.Println(pc.B.A.x)
+	fmt.Println(pc.B.x)
+	fmt.Println(pc.A.x)
+	fmt.Println(pc.x)
+
+	// The following 4 lines are equivalent.
+	pc.B.A.MethodA()
+	pc.B.MethodA()
+	pc.A.MethodA()
+	pc.MethodA()
+}
+```
+
+同样地，`gaga.PrintName`可以被看作是`gaga.Person.PrintName`的缩写形式。但是，如果我们认为它不是缩写形式也是可以的。毕竟，类型`Singer`确实拥有一个`PrintName` 方法尽管这个方法是隐式声明的(请阅读下下节内容了解细节)。出于类似的原因，选择器`(&gaga).PrintName`和`(gaga).SetAge`也可以看作或不看作是`(&gaga.Person).PrintName`和`(&gaga.Person).SetAge`的缩写形式。
+
+注意，我们仍然可以使用选择器`gaga.SetAge`，但是仅当`gaga`是类型`Singer`的一个可寻址的值时。它仅仅是`(&gaga).SetAge`的语法糖。可以阅读[methods calls](https://go101.org/article/method.html#call)了解更多细节。
+
+在上面的例子中，`c.B.A.x`被称为选择器`c.x`,`c.B.x`和`c.A.x`的完整形式`MethodA`被称为选择器`c.MethodA` ，`c.B.MethodA`和`c.A.MethodA`的完整形式。
+
+如果选择器的完整形式中的每一个中间名称都对应于一个嵌入字段，则选择器中的中间名称的数量被称为选择器的深度。上面两个示例中使用的选择器的深度是2。
+
+## 选择器的隐藏和冲突
+对于一个值`x`，它的很多完整形式的选择器都可能有相同的最后项`y`(y是显式声明的字段或方法)，并且这些选择器的每个中间名称都代表了一个嵌入字段。对于这种案例，
+
+- 只有深度最浅的完整形式的选择器可以缩写为`x.y`。换句话说，`x.y`表示了最浅深度的完整形式的选择器。其他完整形式选择器被最小深度的全形式选择器**遮盖**。
+
+- 如果有一个以上的完整形式的选择器具有最小深度，那么这些完整形式选择器中没有一个可以缩短为`x.y`这种形式。我们说这些最小深度的完整形式选择器正在**碰撞**（冲突）。
+
+如果一个方法选择器被另一个方法选择器遮盖，且这两个方法相应的方法签名是相同的，我们可以说第一个方法被另一个方法覆盖。
+
+例如，假设A，B和C是三个已定义的类型。
+
+```go
+type A struct {
+	x string
+}
+func (A) y(int) bool {
+	return false
+}
+
+type B struct {
+	y bool
+}
+func (B) x(string) {}
+
+type C struct {
+	B
+}
+```
+
+那么下例中的代码将不能编译通过。原因是选择器`v1.A.x`和`v1.B.x`冲突了，所以它们不能同时被缩写成`v1.x`。`v1.A.y`和`v1.B.y`也是相同的情况。
+
+```go
+var v1 struct {
+	A
+	B
+}
+
+func f1() {
+	_ = v1.x
+	_ = v1.y
+}
+```
+
+下面的代码可以编译通过。选择器`v2.C.B.x`被`v2.A.x`遮盖，所以选择器`v2.x`实际上是`v2.A.x`的缩写形式。因为相同的原因，选择器`v2.y`是`v2.A.y`的缩写形式，而不是`v2.C.B.y`的缩写形式。
+
+```go
+var v2 struct {
+	A
+	C
+}
+
+func f2() {
+	fmt.Printf("%T \n", v2.x) // string
+	fmt.Printf("%T \n", v2.y) // func(int) bool
+}
+```
+
+## 嵌入类型的隐式方法
+
+如上面提到的，类型`Singer`和*`Singer`都有一个`PrintName`方法。并且`*Singer`方法还有一个`SetAge`方法。然而，我们绝没有为这两个类型显式声明这些方法。那么它们（这些方法）从哪里而来？
+
+实际上，
+
+- 对于被嵌入类型的每个方法，如果该方法的选择器既不被其他选择器遮蔽，也不会和其它选择器冲突，那么编译器将会隐式地为被嵌入的类型声明一个相关的方法。因此，编译器还将隐式地为基类型是嵌入类型结构体的未命名指针类型[声明一个对应的方法](https://go101.org/article/method.html#implicit-pointer-methods)。
+
+- 假设结构体类型`S`嵌入了一个命名类型`T`，对于类型`*T`的每个方法，如果该方法的选择器既不被其它选择器遮蔽，也不会和其它选择器冲突，那么编译器将会为类型`*S`隐式声明一个相应的方法。
+
+简单来说，
+
+- 类型`struct{T}`和类型`*struct{T}`将会获取（继承）类型`T`的所有方法。
+- 类型`*struct{T}`也将会获取（继承）类型`*T`的所有方法。
+- 类型`struct{*T}`和类型`*struct{*T}`将会获取（继承）类型`*T`的所有方法。因为类型`T`的方法集是类型`*T`的方法集的子集。我们也可以说类型`struct{*T}`和类型`*struct{*T}`将会获取（继承）类型`T`的所有方法。
+
+下面是类型`Singer`和类型`*Singer`隐式声明的一些方法。
+
+```go
+func (s Singer) PrintName() {
+	s.Person.PrintName()
+}
+
+func (s *Singer) PrintName() {
+	(*s).Person.PrintName()
+}
+
+func (s *Singer) SetAge(age int) {
+	(&s.Person).SetAge(age) // <=> (&((*s).Person)).SetAge(age)
+}
+```
+
+通过文章[methods in Go](https://go101.org/article/method.html)中，我们知道我们不能显式地为基类型是未定义结构体类型的未定义结构体类型和未定义的指针类型声明方法。但是通过类型嵌套，这样的未定义类型也可以拥有方法。
+
+另一个展示隐式声明的方法的例子。
+
+```go
+package main
+
+import "fmt"
+import "reflect"
+
+type F func(int) bool
+func (f F) Validate(n int) bool {
+	return f(n)
+}
+func (f *F) Modify(f2 F) {
+	*f = f2
+}
+
+type B bool
+func (b B) IsTrue() bool {
+	return bool(b)
+}
+func (pb *B) Invert() {
+	*pb = !*pb
+}
+
+type I interface {
+	Load()
+	Save()
+}
+
+func main() {
+	PrintTypeMethods := func(t reflect.Type) {
+		fmt.Println(t, "has", t.NumMethod(), "methods:")
+		for i := 0; i < t.NumMethod(); i++ {
+			fmt.Print("   method#", i, ": ", t.Method(i).Name, "\n")
+		}
+	}
+
+	var s struct {
+		F
+		*B
+		I
+	}
+
+	PrintTypeMethods(reflect.TypeOf(s))
+	fmt.Println()
+	PrintTypeMethods(reflect.TypeOf(&s))
+}
+
+// Output:
+/*
+struct { main.F; *main.B; main.I } has 5 methods:
+   method#0: Invert
+   method#1: IsTrue
+   method#2: Load
+   method#3: Save
+   method#4: Validate
+
+*struct { main.F; *main.B; main.I } has 6 methods:
+   method#0: Invert
+   method#1: IsTrue
+   method#2: Load
+   method#3: Modify
+   method#4: Save
+   method#5: Validate
+*/
+```
+
+如果一个结构体嵌套了一个实现了一个接口类型的类型（被嵌套的类型可能是接口类型本身），那么通常结构体类型也实现了接口类型，例外情况是当由接口类型指定的方法和其他方法或字段有遮盖或冲突时。
+
+请注意，类型只会获取其包含的类型的方法（直接或间接嵌入）。例如，在以下代码中，
+
+- 类型`Age`没有方法，因为它没有嵌入任何类型。
+- 类型`X`有两个方法，`IsOdd`和`Double`。`IsOdd`是通过嵌套类型`MyInt`获取到的。
+- 类型`Y`没有方法，因为它的嵌套类型`Age`没有方法。
+- 类型`Z`只有一个方法，`IsOdd`。因为它包含了类型`MyInt`。它没有从类型`X`获取方法`Double`，因为它不包含类型`X`。
+
+```go
+type MyInt int
+func (mi MyInt) IsOdd() bool {
+	return mi%2 == 1
+}
+
+type Age MyInt
+
+type X struct {
+	MyInt
+}
+func (x X) Double() MyInt {
+	return x.MyInt + x.MyInt
+}
+
+type Y struct {
+	Age
+}
+
+type Z X
+```
+
+## 接口类型嵌套接口类型
+
+不仅结构类型可以嵌入其他类型，接口类型也可以。但是接口类型只能嵌入命名接口类型。有关详细信息，请阅读[interfaces in Go](https://go101.org/article/interface.html#embedding)。
+
+## 一个有趣的类型嵌套例子
+
+最后，让我们看一个有趣的例子，这个例子将会产生死循环和栈溢出。如果你已经理解了上面说的[多态性](https://go101.org/article/interface.html#polymorphism)，那么就会非常容易理解它为什么会产生死循环。
+
+```go
+package main
+
+type I interface {
+	m()
+}
+
+type T struct {
+	I
+}
+
+func main() {
+	var t T
+	var i = &t
+	t.I = i
+	i.m() // will call t.m(), then will call i.m() again, ...
+}
+```
