@@ -121,7 +121,7 @@ func main() {
 
 对于标准Go编译器来说，同一个种类不同类型的`nil`值总是形同的。例如， `[]int`和`[]string`这两个切片类型的`nil`值总是相同的。
 
-## 两个不同类型的`nil`值可能不能被比较
+## 两个不同类型的`nil`值可能不可比较
 
 例如：
 
@@ -155,4 +155,138 @@ var _ = (interface{})(nil) == (*int)(nil)
 // bidirectional channel type which has the same element type.
 var _ = (chan int)(nil) == (chan<- int)(nil)
 var _ = (chan int)(nil) == (<-chan int)(nil)
+```
+
+## 相同类型的两个`nil`值也可能不可比较
+
+在Go中，map，切片和函数类型不支持比较。所以尝试比较两个不可比较类型的`nil`值是不合法的。
+
+```go
+// The following lines fail to compile.
+var _ = ([]int)(nil) == ([]int)(nil)
+var _ = (map[string]int)(nil) == (map[string]int)(nil)
+var _ = (func())(nil) == (func())(nil)
+```
+
+但是上述不可互相比较的类型却可以和`nil`作比较。
+
+```go
+// The following lines compile okay.
+var _ = ([]int)(nil) == nil
+var _ = (map[string]int)(nil) == nil
+var _ = (func())(nil) == nil
+```
+
+## 两个`nil`值可能不相等
+
+如果两个被比较的`nil`值其一是有一个接口类型，而另外一个不是，假设他们是可比较的，那么它们的比较结果总为`false`。原因是非接口值在执行比较操作之前会被转换成接口值的类型。转换后的接口值具有具体的动态类型，但是其他的接口值没有。这就是为什么比较结果总为`false`。
+
+例子：
+
+```go
+fmt.Println( (interface{})(nil) == (*int)(nil) ) // false
+```
+
+## 从一个`nil`map中检索元素不会panic
+
+从一个`nil`的map中检索元素总会返回一个零元素值。
+
+例如：
+
+```go
+fmt.Println( (map[string]int)(nil)["key"] ) // 0
+fmt.Println( (map[int]bool)(nil)[123] )     // false
+fmt.Println( (map[int]*int64)(nil)[123] )   // <nil>
+```
+
+## 迭代`nil`通道、maps，切片和数组指针是合法的
+
+迭代`nil`map和切片的循环次数为零。
+
+迭代一个`nil`的数组指针的循环次数等于该指针相应数组的长度。（然而，如果相应的数组长度不为零，且第二次迭代不能被忽略或省略，那么该迭代将会在运行时panic。）
+
+迭代一个`nil`通道将会永久阻塞。
+
+例如，下面的代码将会打印 `0`，`1`，`2`，`3`和`4`，然后永久阻塞。`Hello`，`world`和`Bye`将永远不会被打印出来。
+
+```go
+for range []int(nil) {
+	fmt.Println("Hello")
+}
+
+for range map[string]string(nil) {
+	fmt.Println("world")
+}
+
+for i := range (*[5]int)(nil) {
+	fmt.Println(i)
+}
+
+for range chan bool(nil) { // block here
+	fmt.Println("Bye")
+}
+```
+
+## 通过非接口`nil`参数调用方法不会panic
+
+例子：
+
+```go
+package main
+
+type Slice []bool
+
+func (s Slice) Length() int {
+	return len(s)
+}
+
+func (s Slice) Modify(i int, x bool) {
+	s[i] = x // panic if s is nil
+}
+
+func (p *Slice) DoNothing() {
+}
+
+func (p *Slice) Append(x bool) {
+	*p = append(*p, x) // panic if p is nil
+}
+
+func main() {
+	// The following selectors will not cause panics.
+	_ = ((Slice)(nil)).Length
+	_ = ((Slice)(nil)).Modify
+	_ = ((*Slice)(nil)).DoNothing
+	_ = ((*Slice)(nil)).Append
+
+	// The following two lines will also not panic.
+	_ = ((Slice)(nil)).Length()
+	((*Slice)(nil)).DoNothing()
+
+	// The following two lines will panic. But panics will
+	// not be triggered at the time of invoking the methods.
+	// It will be triggered in the method bodies.
+	/*
+	((Slice)(nil)).Modify(0, true)
+	((*Slice)(nil)).Append(true)
+	*/
+}
+```
+
+## 如果类型`T`的零值表示为`nil`，则`*new(T)`等于`nil`
+
+例子：
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println(*new(*int) == nil)         // true
+	fmt.Println(*new([]int) == nil)        // true
+	fmt.Println(*new(map[int]bool) == nil) // true
+	fmt.Println(*new(chan string) == nil)  // true
+	fmt.Println(*new(func()) == nil)       // true
+	fmt.Println(*new(interface{}) == nil)  // true
+}
 ```
