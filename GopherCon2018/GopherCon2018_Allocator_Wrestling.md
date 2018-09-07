@@ -137,3 +137,120 @@ type span struct {
 所以现在我们已经涵盖了分配器的3个设计目标中的2个： (1)高效地满足给定大小的分配操作，但是需要避免内存碎片，(2)普通情况下需要避免锁。但是关于目标(3)高效回收空闲的内存是如何实现的？换言之，什么是垃圾回收器》
 
 ## 垃圾回收器
+
+我们必须在对象不再被引用时找到它们并且回收它们。
+
+Go语言使用**三色并发标记清除**垃圾回收器，这听起来很吓人，但事实并非如此。“标记-清除”意味着垃圾收集器被分为了标记阶段，为收集对象去标记，以及清除阶段，用来实际释放内存。
+
+在一个三色垃圾收集器中，对象被标记成白色，灰色，和黑色。刚开始，所有的对象都是白色的。我们首先开始标记所有goroutine栈和全局变量。每当我们达到一个对象时，我们就会将其标记为灰色。
+
+![](https://user-images.githubusercontent.com/1646931/44679351-f8bdba80-a9f7-11e8-8b0e-dbe1f7f17724.png)
+
+当一个对象所有的引用都标记完成时，我们将这个对象标记成黑色。
+
+![](https://user-images.githubusercontent.com/1646931/44679443-3b7f9280-a9f8-11e8-849a-5aec0b828b3d.png)
+
+最终结果就是，所有的对象不是白色就是黑色：
+
+![](https://user-images.githubusercontent.com/1646931/44679461-45a19100-a9f8-11e8-81f1-8952fbfe5190.png)
+
+最后，标记为白色的对象可以被清除和释放。
+
+很简单，是不是？好吧，它留下了一些问题：
+
+- 我们如何知道一个对象的引用有哪些？
+- 我们如何真正地去标记一个对象？
+
+Go使用位图（bitmaps）来获取此类元数据。
+
+### 指针识别
+
+假如我们有个如下的结构体：
+
+```go
+type Row struct {
+  index int
+  data []interface{}
+}
+```
+
+在内存中，这个结构体看起来是像这样的：
+
+![](https://user-images.githubusercontent.com/1646931/44679558-90bba400-a9f8-11e8-89c6-9ad3ec1273e6.png)
+
+那么，垃圾收集器是如何知道它指向的其他对象？即，哪个字段是指针？
+
+需要记住的是堆对象实际上是存在于一个 **arena** 中的。这个 **arena** 的位图告诉我们它的那些字是指针：
+
+![](https://user-images.githubusercontent.com/1646931/44679578-a16c1a00-a9f8-11e8-9a42-31bd426f0bb4.png)
+
+### 标记状态
+
+简单来说，标记状态保存在一个 **span** 的`gcMark`位中：
+
+![](https://user-images.githubusercontent.com/1646931/44679775-1a6b7180-a9f9-11e8-8522-9e2cde8c65ac.png)
+
+一旦我们完成了标记，未标记的对应于空闲槽位，因此我们可以将该标记状态交换为`alloc`位。
+
+![](https://user-images.githubusercontent.com/1646931/44679878-5bfc1c80-a9f9-11e8-8030-89a0fcde8762.png)
+
+这就意味着Go的清除操作通常会非常地快（虽然标记会增加开销，但这是我们必须要关注的）。
+
+垃圾收集器是并发的，但这有点歧义。如果我们由于不小心的实现，程序可能不经意地阻止了垃圾收集器。例如，请使用下面的代码：
+
+```go
+type S struct {
+  p *int
+}
+
+func f(s *S) *int {
+  r := s.p
+  s.p = nil
+  return r
+}
+```
+
+当该代码中函数的第一行执行之后，我们会得到这样的一个状态：
+
+![](https://user-images.githubusercontent.com/1646931/44680059-eba1cb00-a9f9-11e8-968d-cdcfd2b36d5a.png)
+
+在返回语句中，GC的状态可以看成如下这样：
+
+![](https://user-images.githubusercontent.com/1646931/44680146-1b50d300-a9fa-11e8-80ec-8c526b2a8c31.png)
+
+然后返回值将是一个实际上垃圾收集器可以释放的内存的实时指针！
+
+为了防止这种情况放生，编译器将指针的写入转换为写屏障的潜在调用，非常粗暴：
+
+![](https://user-images.githubusercontent.com/1646931/44680255-6ec32100-a9fa-11e8-9c0e-c915d5e89679.png)
+
+Go编译器中有很多这样巧妙的优化可以让这个过程并发执行，但是我们不会在这里深入讲解。
+
+但是，我们大概可以知道，就处理器的开销而言，标记可能是一个潜在的问题。
+
+当GC在标记时，写屏障是打开的。
+
+在标记期间，约25%的`GOMAXPROCS`被用于**后台标记任务**。但有额外的goroutine可能会被强制进行**辅助标记**：
+
+![](https://user-images.githubusercontent.com/1646931/44680297-931efd80-a9fa-11e8-9521-406c3dc288e7.png)
+
+那么为什么需要**辅助标记**呢？一个快速分配的goroutine可以逃过后台标记。所以在标记期间分配时，每个分配都会收取一个goroutine的费用（费用？？）。如果它有债务，它必须在继续之前做一部分标记工作：
+
+```go
+func mallocgc(size uintptr, ...) unsafe.Pointer {
+   // ...
+   assistG.gcAssistBytes -= int64(size)
+	if assistG.gcAssistBytes < 0 {
+       // This goroutine is in debt. Assist the GC to
+       // this before allocating. This must happen
+       // before disabling preemption.
+       gcAssistAlloc(assistG)
+    }
+// ...
+```
+
+## 总结
+
+我们已经了解到了很多关于运行时的知识：
+
+-  
