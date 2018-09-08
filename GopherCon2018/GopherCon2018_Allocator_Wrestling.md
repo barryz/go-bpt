@@ -253,4 +253,181 @@ func mallocgc(size uintptr, ...) unsafe.Pointer {
 
 我们已经了解到了很多关于运行时的知识：
 
--  
+- 运行时将数据分配在 **span** 中以避免内存碎片。
+- 每CPU缓存加快了分配速度，但分配器仍然需要做一些工作。
+- GC是并发的，但是写屏障和辅助标记可能会使程序变慢。
+- GC的工作和*可扫描*的堆成比例（分配一个大的标量buffer要分配一个大的指针buffer开销小的多，因为你必须要跟踪指针）
+
+
+## 工具
+
+看起来动态内存分配有一些开销。那是不是意味着减少分配总是会提高性能？这得看情况。内建的内存分析器可以告诉我们哪里正在进行分配，但这无法回答因果问题， “减少分配是否会产生影响？” 想要回答这些，我们可以使用其他三个工具：
+
+- 原生测试
+- 使用pprof进行样本分析
+- go工具追踪
+
+### 原生测试
+
+如果你想查看分配器和垃圾收集器增加了多少开销，你可以打开下列运行时的标志位：
+
+- `GOGC=off`：关闭垃圾收集器
+- `GODEBUG=sbrk=1`：使用简单的持久化分配器替换整个分配器，该分配器从OS中获取大块（big block)，并在分配时为你提供连续的切片。
+
+![](https://user-images.githubusercontent.com/1646931/44680546-3f60e400-a9fb-11e8-88dd-093c9346f3e0.png)
+
+这看起来可能有点愚蠢，但它是一种可以提供加速潜力的廉价方法。也许30%的加速不值得，或许这也可能是一次令人信服的机会。
+
+这样的尝试会有一些问题：
+
+- 不能再生产环境中使用，需要做基准测试
+- 对于有大堆的程序来说不可靠：持久化分配器可能对这些程序执行的不好
+
+然而，执行这样的检查是值得的。
+
+### 分析（profiling）
+
+一个pprof的CPU分析文件通常可以显示`runtime.mallocgc`所花费的时间。
+
+贴士：
+
+- 在pprof的web UI中使用火焰图来查看
+- 如果二进制文件中不包含pprof，也可以使用Linux的`perf`工具
+
+![](https://user-images.githubusercontent.com/1646931/44680673-b1392d80-a9fb-11e8-96b3-60079912fdee.png)
+
+![](https://user-images.githubusercontent.com/1646931/44680690-b7c7a500-a9fb-11e8-893f-ec9f03225681.png)
+
+它为我们提供了行级别的属性，即我们正在进行的CPU高开销的分配有哪些，并且可以帮助我们了解GC/分配器产生开销的根本原因。
+
+这种做法也会有一些问题：
+
+- 程序可能不是CPU密集型
+- 分配可能不在关键路径上
+- 后台标记时间（`gcBgMarkWorker`）会有误导作用（这里花的时间并不一定意味着有减速）
+
+
+### go工具追踪
+
+*执行追踪器*可能是我们可以理解分配细节及其影响的最佳工具。
+
+执行追踪器在一个很短的时间窗口内捕获非常详细的运行时事件：
+
+```bash
+curl localhost:6060/debug/pprof/trace?seconds=5 > trace.out
+```
+
+可以在web UI中查看它的可视化输出：
+
+```bash
+go tool trace trace.out
+```
+
+尽管它看起来有点密集。。。
+
+![](https://user-images.githubusercontent.com/1646931/44680802-fd846d80-a9fb-11e8-95da-16cbe5739faf.png)
+
+当GC运行时，蓝色条框在顶层显示，而下方条框显示内部发生的一些情况。
+
+记住，最上方的GC不意味着程序被阻塞了，但GC内部发生的事情很有趣！
+
+![](https://user-images.githubusercontent.com/1646931/44680937-4fc58e80-a9fc-11e8-8705-a6a840072e56.png)
+
+![](https://user-images.githubusercontent.com/1646931/44680955-5ce27d80-a9fc-11e8-8dd3-165b13ea6871.png)
+
+最小的mutator利用率曲线还可以显示服务是否以不同的四分位数（25%）进行GC绑定。（“Mutator”在这里的意思是“不是GC”。）
+
+总结
+
+关闭分配器，CPU分析器分析，执行追踪器的基准测试给我们的感觉就是：
+
+- 分配/GC是否会影响性能
+- 哪些地方花费了大量的时间进行分配
+- GC期间程序的吞吐量如何变化
+
+
+## 我们能改变什么？
+
+如果我们得出结论：分配才是程序效率低下的原因，那我们能做些什么？ 下面是一些高级策略用以提升程序运行效率：
+
+- 限制指针
+- 批量分配
+- 复用对象（比如：`sync.Pool`）
+
+
+### 那么只调整`GOGC`会怎么样呢？
+
+- 绝对能够提升程序吞吐量，但是。。。
+- 如果我们想优化程序的吞吐量，GOGC并不能表示真正的目标：“使用所有可用的内存，但没有更多内存使用”
+- 实时的堆大小通常来说不会很小
+- 高GOGC似的避免OOM更加困难
+
+好吧，现在我们可以通过重构代码来改善分配/GC的行为。。。
+
+### 限制指针
+
+可以让Go编译器告诉我们为什么变量会分配到堆上：
+
+```bash
+go build -gcflags="-m -m"
+```
+
+但是它的输出有点多。
+
+[https://github.com/loov/view-annotated-file](https://github.com/loov/view-annotated-file)有助于我们简化这些输出：
+
+![](https://user-images.githubusercontent.com/1646931/44684310-f8c4b700-aa05-11e8-8963-6dffa42c5257.png)
+
+有时候，很容易就能避免虚假的堆内存分配！
+
+![](https://user-images.githubusercontent.com/1646931/44684321-02e6b580-aa06-11e8-892a-f7214bcd6127.png)
+
+![](https://user-images.githubusercontent.com/1646931/44684378-3590ae00-aa06-11e8-9bda-a3c0dba5cfb4.png)
+
+除了避免虚假的堆内存分配，避免使用内部指针的结构体也有助于垃圾收集器：
+
+![](https://user-images.githubusercontent.com/1646931/44684432-4fca8c00-aa06-11e8-9258-0b1307d6d0e5.png)
+
+为什么会出现这样的差异？因为`time.Time`结构体内部隐藏了一个邪恶的指针：
+
+```go
+type Time struct {
+  wall uint64
+  ext in64
+  loc *Location
+}
+```
+
+### 批量分配
+
+即使分配器中的快速路径已经被优化到了极致，我们仍然需要在每个分配上做一些工作：
+
+- 防止自己被别人抢先一步
+- 检查自身是否需要协助GC
+- 计算`mcache`中的下一个空闲槽位
+- 设置堆内位图的比特位
+- 等等。。。
+
+这一系列的工作使得每次分配最终会耗时大约20ns，在这样的情形下，某些案例中我们可以通过减少更大的分配来分摊开销：
+
+```go
+// Allocate individual interface{}s out of a big buffer
+type SlicePool struct {
+	bigBuf []interface{}
+}
+
+func (s *SlicePool) GetSlice(size int) []interface{} {
+	if size >= len(s.bigBuf) {
+		s.bigBuf = make([]interface{}, blockSize)
+	}
+	res := s.bigBuf[:size]
+	s.bigBuf = s.bigBuf[size:]
+	return res
+}
+```
+
+这样做的危险在于任何实时的引用将使整个slab存活：
+
+![](https://user-images.githubusercontent.com/1646931/44684603-b94a9a80-aa06-11e8-9249-e2ad311f5587.png)
+
+而且，这些都不是并发安全的。它们仅仅适合一些重度分配的goroutines。
