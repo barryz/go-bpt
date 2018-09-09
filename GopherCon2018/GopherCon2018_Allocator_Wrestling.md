@@ -431,3 +431,65 @@ func (s *SlicePool) GetSlice(size int) []interface{} {
 ![](https://user-images.githubusercontent.com/1646931/44684603-b94a9a80-aa06-11e8-9249-e2ad311f5587.png)
 
 而且，这些都不是并发安全的。它们仅仅适合一些重度分配的goroutines。
+
+### 对象回收复用
+
+考虑下面的存储引擎架构：
+
+![](https://user-images.githubusercontent.com/1646931/44684697-f7e05500-aa06-11e8-9650-7364d17b5401.png)
+
+这个架构：
+
+- 很简单，容易理解
+- 最大化的并发
+- 制造了成吨的垃圾
+
+优化： 显式地回收复用已分配的内存块：
+
+![](https://user-images.githubusercontent.com/1646931/44684763-21997c00-aa07-11e8-9bd2-8ebbc58ef8cb.png)
+
+```go
+var buf RowBuffer
+select {
+  case buf = <-recycled:
+  default:
+    buf = NewRowBuffer()
+}
+```
+
+一个更加复杂的版本是使用`sync.Pool`
+
+- 维护回收对象的切片，被CPU共享（需要运行时支持）
+- 允许在快速路径中无锁地get/put
+- 在每次的GC时都被清除
+
+**警告**： 必须非常小心设零或覆盖已回收的内存。
+
+
+## 回顾
+
+下面是经过连续几轮优化后的不同基准测试图表：
+
+![](https://user-images.githubusercontent.com/1646931/44685103-df246f00-aa07-11e8-99d1-4fe0a376c69d.png)
+
+总结下：
+
+- 内存分配器和垃圾回收器设计十分巧妙！
+- 单个内存分配速度很快但不是免费的。
+- 垃圾回收器能够暂停某些特定的goroutines，尽管**STW**暂停非常短暂。
+- 结合相关工具对于了解程序正在发生的事情非常重要： 关闭GC的基准测试。
+- 使用CPU分析器发现热点分配区域。
+- 使用内存分析器了解内存分配次数/字节数。
+- 使用执行追踪器了解GC模式。
+- 使用逃逸分析器了解为什么会发生分配。
+
+
+## 延伸阅读
+
+建议延伸阅读：
+
+**Allocation efficiency in high-performance Go services** Achille Roussel / Rick Branson [segment.com/blog/allocation-efficiency-in-high- performance-go-services/](segment.com/blog/allocation-efficiency-in-high- performance-go-services/)
+
+**Go 1.5 concurrent garbage collector** pacing Austin Clements [golang.org/s/go15gcpacing](https://docs.google.com/document/d/1wmjrocXIWTr1JxU-3EQBI6BK6KgtiFArkG47XK73xIQ/edit#)
+
+**So You Wanna Go Fast** Tyler Treat [bravenewgeek.com/so-you-wanna-go-fast/](https://bravenewgeek.com/so-you-wanna-go-fast/)
