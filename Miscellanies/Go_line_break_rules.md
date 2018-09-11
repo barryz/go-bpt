@@ -142,3 +142,178 @@ anObject
 		.MethodB()
 		.MethodC()
 ```
+
+在下面修改的例子中，编译器会在每行的末尾插入一个分号，所以上面的例子和下面的例子是等价的，都是明显不合法的。
+
+```go
+anObject;
+	.MethodA();
+	.MethodB();
+	.MethodC();
+```
+
+也有很多不恰当的断行例子。如果你认为上述例子中的断行规则难以理解，下面是一个更加简单的规则。这个规则是完整规则的子集。
+
+通常来说，我们应该只在有二元操作，赋值符号，单个点`.`，逗号，分号或任意左括号(`{`，`[`，`{`)之后断行。
+
+分号插入规则能让我们写出更加简洁的代码。同时，他们还可以编写一些合法但是有点怪异的代码，例如，
+
+```go
+package main
+
+import "fmt"
+
+func alwaysFalse() bool {return false}
+
+func main() {
+	for
+	i := 0
+	i < 6
+	i++ {
+		// use i ...
+	}
+
+	if x := alwaysFalse()
+	!x {
+		// do something ...
+	}
+
+	switch alwaysFalse()
+	{
+	case true: fmt.Println("true")
+	case false: fmt.Println("false")
+	}
+}
+```
+
+上面三个控制流代码块都是合法的。编译器将会在第9,10,15和20行的行尾插入一个分号。
+
+请注意，上述例子中的`switch-case`代码块将会打印一个`true`来代替`false`。这和下面的例子不一样：
+
+```go
+switch alwaysFalse() {
+	case true: fmt.Println("true")
+	case false: fmt.Println("false")
+}
+```
+
+如果你使用命令`go fmt`来格式化之前的例子，该命令将会在`alwaysFalse()`调用之后自动追加一个分号，代码会变成如下这样：
+
+```go
+switch alwaysFalse();
+	{
+	case true: fmt.Println("true")
+	case false: fmt.Println("false")
+}
+```
+
+该修改的版本和下面的例子是等价的。
+
+```go
+switch alwaysFalse(); true {
+case true: fmt.Println("true")
+case false: fmt.Println("false")
+}
+```
+
+这就是为什么它会打印一个`true`。
+
+为你编写的代码经常运行`go fmt`和`go vet`是一个良好的编程习惯。
+
+对于一个十分罕见的情况，分号插入规则也会使一些代码看起来是合法但实则非法的情况。例如，下面两个代码片段都将编译失败。
+
+```go
+func fa() {
+	var c chan bool
+	select {
+	case <-c:
+	{
+		goto A
+		A: // compiles okay
+	}
+	case <-c:
+		goto B
+		B: // syntax error: missing statement after label
+	case <-c:
+		goto C
+		C: // compiles okay
+	}
+}
+```
+
+```go
+func fb() {
+	switch 3 {
+	case 2:
+		goto B
+		B: // syntax error: missing statement after label
+	case 1:
+	{
+		goto A
+		A: // compiles okay
+	}
+	case 0:
+		goto C
+		C: // compiles okay
+	}
+}
+```
+
+上面两个编译报错表明标签定义之后必须要跟随一个语句。但是看上去上述两个例子中的每个标签都没有跟随一个语句。那么为什么只有两个`B:`标签声明处才是非法的？产生这种情况的原因就是，通过上面提到的分号插入规则，编译器会在每个合法的标签声明的结尾处插入一个分号，但不会在两个`B:`标签声明之后插入分号。每个插入的`;`可以被视作一个空语句，这就是为什么`A:`和`C:`标签声明都是合法的。
+
+我们可以为每个`B:`标签声明处手动插入一个分号（一个空语句）来保证编译成功。
+
+因为标签定义也是语句，所以下面的代码也是合法的，尽管标签定义的形式在实践中完全没有意义。
+
+```go
+func f() {
+	A:B: // has not any usefulness
+	for {
+		break B
+		goto A
+	}
+}
+```
+
+## 逗号（`,`）不会自动插入
+
+在一些包含了多个类似项目的语法形式中，逗号被当作分隔符使用，例如复合字面值，函数参数列表和函数原型中的入参列表、返回值列表等。在这样的语法形式中，如果逗号不是其对应代码行中的最后一个有效字符，那么最后一项之后的最后一个逗号是可选的，否则，逗号就必须存在。
+
+编译器不会在任何情况下自动插入逗号。
+
+例如：下面的代码是合法的。
+
+```go
+func f1(a int, b string,) (x bool, y int,) {
+	return true, 789
+}
+var f2 func (a int, b string) (x bool, y int)
+var f3 func (a int, b string, // the last comma is required
+) (x bool, y int,             // the last comma is required
+)
+var _ = []int{2, 3, 5, 7, 9,} // the last comma is optional
+var _ = []int{2, 3, 5, 7, 9,  // the last comma is required
+}
+var _ = []int{2, 3, 5, 7, 9}
+var _, _ = f1(123, "Go",) // the last comma is optional
+var _, _ = f1(123, "Go",  // the last comma is required
+)
+var _, _ = f1(123, "Go")
+```
+
+然而，下面的代码是不合法的，对于编译来说，它将会为代码中的每行插入一个分号，第二行除外。
+
+```go
+func f1(a int, b string,) (x bool, y int // error: unexpected newline
+) {
+	return true, 789
+}
+var _ = []int{2, 3, 5, 7, 9 // error: unexpected newline
+}
+var _, _ = f1(123, "Go" // error: unexpected newline
+)
+```
+
+## 结束语
+
+就像Go中其他特性一样，分号插入规则毁誉参半。有些程序员不喜欢这个规则，因为他们认为这限制了代码风格的自由性。赞扬者则认为这个规则能够使编译速度更快，并且使不同程序员编写的代码保持同一风格，所以很容易理解其他人写的代码。
