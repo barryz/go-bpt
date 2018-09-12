@@ -199,3 +199,120 @@ func withDefers(filepath string, head, body []byte) error {
 ```
 
 上面哪个例子看起来更加简洁？明显的，有延迟函数的例子看起来更加简洁明了，而且它看起来更不容易出bug，假如任何`f.Close()`遗忘了怎么办？
+
+下面的例子将展示延迟函数如何使代码减少bug出现的几率。如果下面的`doSomething`函数调用出现了panic，那么函数`f1`退出时会伴随着互斥量的解锁操作。所以函数`f1`会更少地出现bug。
+
+```go
+var m sync.Metex
+
+func f1() {
+	m.Lock()
+	defer m.Unlock()
+	doSomething()
+}
+
+func f2() {
+	m.Lock()
+	doSomething()
+	m.Unlock()
+}
+```
+
+## 延迟函数调用导致的性能损耗
+
+使用延迟函数并不总是合适的。到当前为止（Go1.11）为止，对于官方的Go编译器来说，延迟函数在运行时的调用将会导致一些性能损耗，特别是当延迟函数在一个循环内部调用时。
+
+例如，在下面的例子中，方法`CounterB`和`IncreaseB`比方法`CounterA`和`IncreaseA`效率高的多。
+
+```go
+import "sync"
+
+type T struct {
+	mu sync.Mutex
+	n  int64
+}
+
+func (t *T) CounterA() int64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.n
+}
+
+func (t *T) CounterB() (count int64) {
+	t.mu.Lock()
+	count = t.n
+	t.mu.Unlock()
+	return
+}
+
+func (t *T) IncreaseA() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.n++
+}
+
+func (t *T) IncreaseB() {
+	t.mu.Lock()
+	t.n++ // this line will not panic for sure
+	t.mu.Unlock()
+}
+```
+
+但是在B版本的方法中，我们需要保证在`Lock`和`Unlock`之间的代码不会发生panic。
+
+通常来说，实践中，推荐使用A版本的方法。当我们真正地关心程序的性能时，才使用B版本方法。
+
+## 延迟函数调用导致的资源泄露
+
+一个超大的延迟调用栈可能会消耗大量的内存。未执行的延迟调用可能会阻止某些资源的释放。例如，如果在调用以下函数时需要处理大量文件，那么大量的文件处理器（handler）将无法释放。
+
+```go
+func writeManyFile(files []File) error {
+	for _, file := range files {
+		f, err := os.Open(file.path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		_, err = f.WriteString(file.content)
+		if err != nil {
+			return err
+		}
+
+		err = f.Sync()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+```
+
+对于这样的案例，我们可以使用匿名函数来封装延迟调用，以便延迟函数的调用在更早的时候执行。例子，上面的例子可以重写优化为下面的代码片段
+
+```go
+func writeManyFile(files []File) error {
+	for _, file := range files {
+		if err := func() error {
+			f, err := os.Open(file.path)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+
+			_, err = f.WriteString(file.content)
+			if err != nil {
+				return err
+			}
+
+			return f.Sync()
+		}(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+```
