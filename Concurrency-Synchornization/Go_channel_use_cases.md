@@ -328,7 +328,7 @@ func main() {
 
 ## 使用通道作为互斥锁
 
-上面某个例子中已经展示了容量为1的缓冲通道可以被用作一次性的[二进制信号量]()。实际上，这样的通道也可以被用作多次的二进制信号量，又名，互斥锁，尽管这样的互斥锁在效率上不如`sync`标准库提供的互斥锁高效。
+上面某个例子中已经展示了容量为1的缓冲通道可以被用作一次性的[二进制信号量](https://en.wikipedia.org/wiki/Semaphore_(programming))。实际上，这样的通道也可以被用作多次的二进制信号量，又名，互斥锁，尽管这样的互斥锁在效率上不如`sync`标准库提供的互斥锁高效。
 
 使用单一容量缓冲通道作为互斥锁有两种形式。
 
@@ -369,7 +369,7 @@ func main() {
 
 ## 使用通道作为计数信号量
 
-容量大于1的可缓冲通道可以被用作为[计数信号量]()。计数信号量可以被视为多所属者锁（multi-owner locks）。如果一个通道的容量是`N`，那么它可以被看作是在任意时间拥有至多`N`个所属者的信号量。二进制信号量（互斥量）是一种特殊的计数信号量，每个二进制信号量在任意时间至多只有一个所属者。计数信号量通常被用于吞吐量限制以及确认资源配额。
+容量大于1的可缓冲通道可以被用作为[计数信号量](https://en.wikipedia.org/wiki/Semaphore_(programming))。计数信号量可以被视为多所属者锁（multi-owner locks）。如果一个通道的容量是`N`，那么它可以被看作是在任意时间拥有至多`N`个所属者的信号量。二进制信号量（互斥量）是一种特殊的计数信号量，每个二进制信号量在任意时间至多只有一个所属者。计数信号量通常被用于吞吐量限制以及确认资源配额。
 
 和将通道作为互斥量使用一样，获得通道信号量的一个所有权也有两种形式。
 
@@ -490,3 +490,243 @@ func main() {
 通道信号量的用例有一个变种。在上面的两个例子中，尽管吞吐量被限制了，但是可能会堆积很多的请求（消费者）。这并不总是一个好主意，有时最好通过使用下面即将介绍的try-receive或try-send机制来建议在队列中的消费者去其他的bars。
 
 ## Ping-Pong（对话）
+
+有时候，将在两个goroutines之间来回处理一段数据，或者传递消息。这就像是一个ping-pong游戏或者是两个goroutines正在对话。
+
+一个打印一系列斐波那契数列的例子：
+
+```go
+package main
+
+import "fmt"
+import "time"
+import "os"
+
+type Ball uint64
+
+func Play(playerName string, table chan Ball) {
+	var lastValue Ball = 1
+	for {
+		ball := <- table // get the ball
+		fmt.Println(playerName, ball)
+		ball += lastValue
+		if ball < lastValue { // overflow
+			os.Exit(0)
+		}
+		lastValue = ball
+		table <- ball // bat back the ball
+		time.Sleep(time.Second)
+	}
+}
+
+func main() {
+	table := make(chan Ball)
+	go func() {
+		table <- 1 // throw ball on table
+	}()
+	go Play("A:", table)
+	Play("B:", table)
+}
+```
+
+## 在通道内封装通道
+
+有时候，我们可以使用一个通道类型作为另一个通道的元素类型。在下面的例子中，`<-chan chan<- int`是一个元素类型为仅发送类型通道`chan<- int`的仅接收通道。
+
+```go
+package main
+
+import "fmt"
+
+var counter = func (n int) chan<- chan<- int { // chan<- (chan<- int)
+	requests := make(chan chan<- int) // chan (chan<- int)
+	go func() {
+		for request := range requests {
+			if request == nil {
+				n++ // increase
+			} else {
+				request <- n // retrieve
+			}
+		}
+	}()
+	return requests // implicitly converted to chan<- (chan<- int)
+}(0)
+
+func main() {
+	increase1000 := func(done chan<- struct{}) {
+		for i := 0; i < 1000; i++ {
+			counter <- nil
+		}
+		done <- struct{}{}
+	}
+
+	done := make(chan struct{})
+	go increase1000(done)
+	go increase1000(done)
+	<-done; <-done
+
+	request := make(chan int, 1)
+	counter <- request
+	fmt.Println(<-request) // 2000
+}
+```
+
+尽管上面例子中的封装实现可能不够高效，但是在有些场景下却是非常有用的。
+
+## 检查通道的容量和长度
+
+我们可以使用内建函数`cap`和`len`来检查一个通道的容量和长度，尽管在实践中我们极少使用它。我们极少使用它的原因是当使用`len`函数来检查一个通道的长度时，该长度可能会在检查之后发生变化。极少使用`cap`函数的原因是对我们来说，一个通道的容量或许并不是那么的重要。
+
+然而，在有些场景下我们也许会需要这两个函数。
+
+例如，有时候，我们想要接收在非关闭的通道`c`中 缓冲的所有的值，此时并没有人会再发送值，那么我们就可以使用下面的代码来接收余下的所有值。
+
+```go
+for len(c) > 0 {
+	value := <-c
+	// use value ...
+}
+```
+
+我们也可以使用下面即将介绍的try-receive机制来做这样的事情。这两种方式的效率几乎是相同的。
+
+有时候，一个goroutine可能希望将一些值写入到缓冲的通道`c`中，直到该通道已满，而且不会在结束时进入阻塞状态，并且该goroutine是该通道的唯一发送者，那么我们可以使用如下的代码进行这样的工作：
+
+```go
+for len(c) < cap(c) {
+	c <- aValue
+}
+```
+
+## 永久阻塞当前的goroutine
+
+`select`机制在Go中是一个独一无二的特性。它为并发编程带来了很多的模式和技巧。关于如何使用`select`机制，请阅读文章[channels in Go](https://go101.org/article/channel.html#select)。
+
+我们可以使用空选择代码块`select {}`来永久阻塞当前的goroutine。这是`select`机制最简单的用例。实际上，上面的例子中的一些代码`for {time.Sleep(time.Second)}`可以使用`select {}`替换。
+
+通常，`select{}`用于阻止主goroutine退出，因为一旦主goroutine退出，整个程序也将退出。
+
+例子：
+
+```go
+package main
+
+import "time"
+
+func DoSomething() {
+	for {
+		// do something ...
+		time.Sleep(time.Hour) // sleeping is not blocking
+	}
+}
+
+func main() {
+	go DoSomething()
+	select{}
+}
+```
+
+顺便说下，也有[some other ways](https://go101.org/article/summaries.html#block-forever)来使一个goroutine进入永久阻塞状态，但是`select{}`是最简单的一个。
+
+
+## 尝试发送和尝试接收
+
+在Go中，有一个`default`分支和只有一个`case`分支的选择块被称作一个尝试发送或尝试接收的通道操作，接收或发送取决于跟在`case`关键字后面的语句是一个接收操作还是一个发送操作。
+
+- 如果跟在`case`关键字后的是一个通道发送操作，那么该选择代码块被称为尝试发送操作。如果该发送操作会被阻塞，那么`default`分支将会执行（发送失败），否则，唯一的`case`分支将会被执行，且发送操作将成功结束。
+
+- 如果跟在`case`关键字后的是一个通道接收操作，那么该选择代码块被称为尝试接收操作。如果该发送操作会被阻塞，那么`default`分支将会执行（接收失败），否则，唯一的`case`分支将会被执行，且接收操作将成功结束。
+
+尝试发送和尝试接收操作永远不会阻塞。
+
+标准的Go编译器对尝试发送和尝试接收操作做了一些优化，它们的执行效率远高于多case选择代码块。
+
+下面是一个展示尝试发送和尝试接收操作是如何工作的。
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	type Book struct{id int}
+	bookshelf := make(chan Book, 3)
+
+	for i := 0; i < cap(bookshelf) * 2; i++ {
+		select {
+		case bookshelf <- Book{id: i}:
+			fmt.Println("succeed to put book", i)
+		default:
+			fmt.Println("failed to put book")
+		}
+	}
+
+	for i := 0; i < cap(bookshelf) * 2; i++ {
+		select {
+		case book := <-bookshelf:
+			fmt.Println("succeed to get book", book.id)
+		default:
+			fmt.Println("failed to get book")
+		}
+	}
+}
+
+/*
+Output:
+
+succeed to put book 0
+succeed to put book 1
+succeed to put book 2
+failed to put book
+failed to put book
+failed to put book
+succeed to get book 0
+succeed to get book 1
+succeed to get book 2
+failed to get book
+failed to get book
+failed to get book
+*/
+```
+
+之后的子章节将会展示更多的尝试发送和尝试接收的用例。
+
+### 检查一个无缓冲通道是否关闭而不用阻塞当前的goroutine
+
+假设保证没有值可以被发送到一个无缓冲的通道，我们可以使用下面例子中的代码来检查一个无缓冲的通道是否已经关闭，而不用阻塞当前的goroutine，这里元素类型`T`是相应的通道类型。
+
+```go
+func IsClosed(c chan T) bool {
+	select {
+	case <-c:
+		return true
+	default:
+	}
+	return false
+}
+```
+
+用这种方式来检查一个无缓冲通道是否关闭在Go的并发编程实践中很流行。
+
+
+### 峰值限制
+
+我们在上节[use channels as counting semaphores](https://go101.org/article/channel-use-cases.html#semaphore)的结尾提到了，如果目前的bar例没有可用的seats，最好是建议新来的消费者去其他的bar。这就被称作峰值限制。
+
+下面的例子是关于[use channels as counting semaphores](https://go101.org/article/channel-use-cases.html#semaphore)的修改版本。
+
+```go
+...
+	bar24x7 := make(Bar, 10) // can serve most 10 consumers
+	for customerId := 0; ; customerId++ {
+		time.Sleep(time.Second)
+		consumer := Consumer{customerId}
+		select {
+		case bar24x7 <- consumer: // try to enter the bar
+			go bar24x7.ServeConsumer(consumer)
+		default:
+			log.Print("consumer#", customerId, " goes elsewhere")
+		}
+	}
+...
+```
