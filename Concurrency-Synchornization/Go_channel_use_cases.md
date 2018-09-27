@@ -730,3 +730,247 @@ func IsClosed(c chan T) bool {
 	}
 ...
 ```
+
+### 另一种方式实现First-Response-Wins用例
+
+正如上面提到的，我们可以使用`select`机制（尝试发送）配合一个容量至少为1的缓冲通道来实现first-response-wins用例。例如，
+
+```go
+package main
+
+import (
+	"fmt"
+	"math/rand"
+	"time"
+)
+
+func source(c chan<- int32) {
+	ra, rb := rand.Int31(), rand.Intn(3)+1
+	time.Sleep(time.Duration(rb) * time.Second) // sleep 1s, 2s or 3s
+	select {
+	case c <- ra:
+	default:
+	}
+}
+
+func main() {
+	rand.Seed(time.Now().UnixNano())
+
+	c := make(chan int32, 1) // the capacity should be at least 1
+	for i := 0; i < 5; i++ {
+		go source(c)
+	}
+	rnd := <-c // only the first response is used
+	fmt.Println(rnd)
+}
+```
+
+请注意，上面例子中的通道的缓冲元素个数至少是一个，这样如果接收/请求方没有及时准备就不会错过第一次发送。
+
+### 第三种实现First-Response-Wins用例的方式
+
+对于一个first-response-wins用例来说，如果源的数量很少，两个或者三个，我们可以使用一个`select`代码块来同时接收源响应。例如，
+
+```go
+package main
+
+import (
+	"fmt"
+	"math/rand"
+	"time"
+)
+
+func source() <-chan int32 {
+	c := make(chan int32, 1) // must be a buffered channel
+	go func() {
+		ra, rb := rand.Int31(), rand.Intn(3)+1
+		time.Sleep(time.Duration(rb) * time.Second)
+		c <- ra
+	}()
+	return c
+}
+
+func main() {
+	rand.Seed(time.Now().UnixNano())
+
+	var rnd int32
+	select{
+	case rnd = <-source():
+	case rnd = <-source():
+	case rnd = <-source():
+	}
+	fmt.Println(rnd)
+}
+```
+
+上面介绍的两种方式以及最后子小节的方式同样也可以用作N(1)-to-1通知。
+
+
+### 超时
+
+在一些请求/响应的场景中，由于各种原因，一个响应可能需要等待很长时间才能返回给请求，有时候甚至不会有响应。对于这样的情况，我们应该使用超时机制返回给客户端一个错误信息。这样的超时机制可以通过`select`机制实现。
+
+下面的代码将展示如何实现一个带有超时机制的请求。
+
+```go
+func requestWithTimeout(timeout time.Duration) (int, error) {
+	c := make(chan int)
+	go doRequest(c) // may need a long time to response
+
+	select {
+	case data := <-c:
+		return data, nil
+	case <-time.After(timeout):
+		return 0, errors.New("timeout")
+	}
+}
+```
+
+### 断续器（Ticker）
+
+我们可以使用一个缓冲通道配合一个尝试发送机制来实现一个断续器。。
+
+```go
+package main
+
+import "fmt"
+import "time"
+
+func Tick(d time.Duration) <-chan struct{} {
+	c := make(chan struct{}, 1) // the capacity should be exactly one
+	go func() {
+		for {
+			time.Sleep(d)
+			select {
+			case c <- struct{}{}:
+			default:
+			}
+		}
+	}()
+	return c
+}
+
+func main() {
+	t := time.Now()
+	for range Tick(time.Second) {
+		fmt.Println(time.Since(t))
+	}
+}
+```
+
+实际上，标准库`time`中有个函数`Tick`提供了相同的功能，但是效率会高的多。我们应该使用此函数以避免使用自定义的断续器。
+
+### 限速（Rate Limiting）
+
+上面中的一个例子已经展示了如何使用尝试发送机制来实现峰值限制。我们同样可以使用尝试发送机制来实现限速。下面是一个从[Go官方wiki](https://github.com/golang/go/wiki/RateLimiting)引用的一个例子。在这个例子中，长时间内每秒处理的平均请求数不会超过10。但是有时候，在某个短周期内，可能会有5个左右的请求被并发处理。
+
+```go
+import "time"
+
+type Request interface{}
+func handle(Request) {/* do something */}
+
+const RateLimit = 10
+const BurstLimit = 5 // 1 means bursts are not supported.
+
+func handleRequests(requests <-chan Request) {
+	throttle := make(chan time.Time, BurstLimit)
+
+	go func() {
+		tick := time.NewTicker(time.Second / RateLimit)
+		defer tick.Stop()
+		for t := range tick.C {
+			select {
+			case throttle <- t:
+			default:
+			}
+		}
+	}()
+
+	for reqest := range requests {
+		<-throttle
+		go handle(reqest)
+	}
+}
+```
+
+### 开关
+
+从[channels in Go](https://go101.org/article/channel.html)文章中，我们已经学习到如果一个goroutine尝试发送（到）或接收（从）一个nil通道时，该goroutine会永久阻塞。通过利用这一事实，我们可以改变`select`代码块中涉及的通道，以影响`select`代码块中的分支选择。
+
+下面是一个使用`select`机制实现的另一个ping-pong例子。在这个例子中，`select`块中涉及的两个通道变量之一是`nil`。对应于`nil`通道的`case`分支将无法确定。我们可以认为这样的`case`分支处于关闭状态。在每个循环步骤的结束时，两个`case`分支的开关状态将会被交换。
+
+```go
+package main
+
+import "fmt"
+import "time"
+import "os"
+
+type Ball uint8
+func Play(playerName string, table chan Ball, serve bool) {
+	var receive, send chan Ball
+	if serve {
+		receive, send = nil, table
+	} else {
+		receive, send = table, nil
+	}
+	var lastValue Ball = 1
+	for {
+		select {
+		case send <- lastValue:
+		case value := <- receive:
+			fmt.Println(playerName, value)
+			value += lastValue
+			if value < lastValue { // overflow
+				os.Exit(0)
+			}
+			lastValue = value
+		}
+		receive, send = send, receive // switch on/off
+		time.Sleep(time.Second)
+	}
+}
+
+func main() {
+	table := make(chan Ball)
+	go Play("A:", table, false)
+	Play("B:", table, true)
+}
+```
+
+### 控制代码异常的可能性权重
+
+我们可以在`select`代码块中重复一个`case`分支，以增加相应代码片段的执行可能性的权重。
+
+例子：
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	foo, bar := make(chan struct{}), make(chan struct{})
+	close(foo); close(bar) // for demo purpose
+	x, y := 0.0, 0.0
+	f := func(){x++}
+	g := func(){y++}
+	for i := 0; i < 100000; i++ {
+		select {
+		case <-foo: f()
+		case <-foo: f()
+		case <-bar: g()
+		}
+	}
+	fmt.Println(x/y) // about 2
+}
+```
+
+函数`f`被调用的可能性将会是函数`g`被调用的可能性的两倍。
+
+### 从动态数字中选择的用例
+
+我们可以使用`reflect`标准库中的一些函数在运行时构造一个`select`代码块。这个动态创建的`select`代码块可以拥有任意多个`case`分支。但是请注意，反射的方式相较于常规的方式是十分低效的。
+
+`reflect`标准库同样提供了`TrySend`和`TryRecv`函数来实现one-case-plus-default `select`代码块。
