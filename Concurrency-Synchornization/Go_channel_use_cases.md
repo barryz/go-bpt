@@ -969,8 +969,297 @@ func main() {
 
 函数`f`被调用的可能性将会是函数`g`被调用的可能性的两倍。
 
-### 从动态数字中选择的用例
+### 从动态数字中选择
 
 我们可以使用`reflect`标准库中的一些函数在运行时构造一个`select`代码块。这个动态创建的`select`代码块可以拥有任意多个`case`分支。但是请注意，反射的方式相较于常规的方式是十分低效的。
 
 `reflect`标准库同样提供了`TrySend`和`TryRecv`函数来实现one-case-plus-default `select`代码块。
+
+
+## 数据流操作
+
+本节将介绍一些使用长生命周期的通道进行数据流操作的用例。在实践中有很多与数据流相关的应用场景。例如消息队列（pub/sub），大数据处理（map/reduce），负载均衡以及劳务分工等等。
+
+通常，一个数据流的应用是由很多模块组成的。不同的模块做不同的工作。每个模块拥有自己的一组workers（goroutine），这些workers用来并发地执行由该模块指定的工作。这里是实践中一些模块可能会做的工作：
+
+- 数据生成/收集/加载。
+- 数据服务/存储。
+- 数据验证/分析。
+- 数据聚合/区分。
+- 数据组合/分解。
+- 数据复制/扩散。
+
+一个模块内的worker可能会从其他的模块接收数据，并且有可能向其他的模块发送数据。换言之，一个模块可能既是生产者也可能是消费者。一个只发送数据至其他模块，但不从其他模块接收数据的，我们称之为仅发送者模块。一个只从其他模块接收数据，但不发送数据至其他模块的，我们称之为仅接收者模块。
+
+众多的模块组成了一个数据流系统。
+
+下面我们将展示一些数据流模块工作者实现。这些实现仅供教学示例，所以它们可能既不高效也不灵活。
+
+### 数据生成/收集/加载
+
+有各类的仅发送者模块。一个仅发送者模块的工作者可以生产数据流
+
+- 通过加载一个文件，从数据库中读取，或者从网络上爬取。
+- 通过从各种硬件中收集各种指标。
+- 通过生成随机数。
+- 等等。
+
+在这里，我们使用一个随机数生成作为示例。生成函数能返回一个结果值但不需要接收任何参数。
+
+```go
+import (
+	"crypto/rand"
+	"encoding/binary"
+)
+
+func RandomGenerator() <-chan uint64 {
+	c := make(chan uint64)
+	go func() {
+		rnds := make([]byte, 8)
+		for {
+			_, err := rand.Read(rnds)
+			if err != nil {
+				close(c)
+			}
+			c <- binary.BigEndian.Uint64(rnds)
+		}
+	}()
+	return c
+}
+```
+
+实际上，这个随机数生成器是一个多返回值的期刊，这个已经在本文之前的内容中介绍过了。
+
+数据生产者可以随时关闭输出流通道以结束数据生成。
+
+### 数据聚合
+
+数据聚合模块工作者将相同数据类型的若干数据流聚合到一个流中。假设数据类型是`int64`，下面的函数将会将任意多的数据流聚合到一个流内。
+
+```go
+func Aggregator(inputs ...<-chan uint64) <-chan uint64 {
+	output := make(chan uint64)
+	for _, in := range inputs {
+		in := in // this line is important
+		go func() {
+			for {
+				output <- <-in // <=> output <- (<-in)
+			}
+		}()
+	}
+	return output
+}
+```
+
+更好的实现应该考虑输入流是否已经关闭。（这个也适用于以下其他模块工作者的实现。）
+
+```go
+...
+		in := in // this line is important
+		go func() {
+			for {
+				x, ok := <-in
+				if ok {
+					output <- x
+				} else {
+					close(output)
+				}
+			}
+		}()
+...
+```
+
+如果需要聚合的数据非常少（两到三个），我们可以使用`select`块来聚合这些数据流。
+
+```go
+// Assume the number of input stream is two.
+...
+	output := make(chan uint64)
+	go func() {
+		inA, inB := inputs[0], inputs[1]
+		for {
+			select {
+			case v := <- inA: output <- v
+			case v := <- inB: output <- v
+			}
+		}
+	}
+...
+```
+
+### 数据区分
+
+数据区分模块工作者所做的工作与数据聚合模块工作者的工作正好相反。实现一个数据区分工作者很容易，但是在实践中，数据区分工作者并不是很有用，且很少被用到。
+
+```go
+func Divisor(input <-chan uint64, outputs ...chan<- uint64) {
+	for _, out := range outputs {
+		out := out // this line is important
+		go func() {
+			for {
+				out <- <-input // <=> out <- (<-input)
+			}
+		}()
+	}
+}
+```
+
+### 数据组合
+
+数据组合和数据聚合很相似，但是数据组合工作者会合并不同数据类型的数据流。对于数据聚合来说，两条数据仍然是两条数据。但是对于数据组合来说，几条数据会被组合成一条数据。
+
+下面是一个数据组合工作者的例子，其中来自一个流的两个`uint64`值和来自另一个流的一个`uint64`值组成一个新的`uint64`值。通常来说，在实践中，这些流的通道元素类型都是不同的。这里使用相同的类型只是为了解释时更加方便。
+
+```go
+func Composor(inA <-chan uint64, inB <-chan uint64) <-chan uint64 {
+	output := make(chan uint64)
+	go func() {
+		for {
+			a1, b, a2 := <-inA, <-inB, <-inA
+			output <- a1 ^ b & a2
+		}
+	}()
+	return output
+}
+```
+
+### 数据分解
+
+数据分解是数据组合的逆过程。分解工作者函数的实现是获取一个输入数据流参数并返回多个数据流结果。
+
+### 数据复制/扩散
+
+数据复制（扩散）可以看作是数据分解的特殊形式。一段数据将被复制，并将每条复制的数据发送到不同的输出数据流中。
+
+例子：
+
+```go
+func Duplicator(in <-chan uint64) (<-chan uint64, <-chan uint64) {
+	outA, outB := make(chan uint64), make(chan uint64)
+	go func() {
+		for {
+			x := <-in
+			outA <- x
+			outB <- x
+		}
+	}()
+	return outA, outB
+}
+```
+
+### 数据计算/分析
+
+数据计算和分析模块的功能变化很大，每个都非常具体。通常来说，这类模块的工作者函数会将输入数据中的每段数据转换成另一段输出数据。
+
+为了简单的演示目的，这里显示了一个工作者示例，它反转每个传输的`uint64`值的每一位。
+
+```go
+func Calculator(input <-chan uint64) (<-chan uint64) {
+	output := make(chan uint64)
+	go func() {
+		for {
+			x := <-input
+			output <- ^x
+		}
+	}()
+	return output
+}
+```
+
+### 数据验证/过滤
+
+数据验证/过滤模块将会清除一个流中的某些传输的数据。例如，下面的工作者函数将会清除所有非素数。
+
+```go
+import "math/big"
+
+func Filter(input <-chan uint64) (<-chan uint64) {
+	output := make(chan uint64)
+	go func() {
+		bigInt := big.NewInt(0)
+		for {
+			x := <-input
+			bigInt.SetUint64(x)
+			if bigInt.ProbablyPrime(1) {
+				output <- x
+			}
+		}
+	}()
+	return output
+}
+```
+
+### 数据服务/保存（存储）
+
+通常，数据服务或保存模块是一个数据流系统中的最后或最终的输出模块。这里只提供一个简单的工作者示例，它打印从输入流接收的每个数据。
+
+```go
+import "fmt"
+
+func Printer(input <-chan uint64) {
+	for {
+		x, ok := <-input
+		if ok {
+			fmt.Println(x)
+		} else {
+			return
+		}
+	}
+}
+```
+
+### 数据流系统组装(Assembling)
+
+现在，让我们使用上面的模块工作者函数来组装几个数据流系统。组装数据流系统只是为了创建一些不同模块的工作者，并为每个工作者指定输入流。
+
+数据流系统示例1（线性管道）：
+
+```go
+package main
+
+... // the worker functions declared above.
+
+func main() {
+	Printer(
+		Filter(
+			Calculator(
+				RandomGenerator(),
+			),
+		),
+	)
+}
+```
+
+上述数据流系统如下图所示。
+
+![](https://go101.org/article/res/data-flow-linear.png)
+
+数据流系统示例2（有向非循环图管道）：
+
+```go
+package main
+
+... // the worker functions declared above.
+
+func main() {
+	filterA := Filter(RandomGenerator())
+	filterB := Filter(RandomGenerator())
+	filterC := Filter(RandomGenerator())
+	filter := Aggregator(filterA, filterB, filterC)
+	calculatorA := Calculator(filter)
+	calculatorB := Calculator(filter)
+	calculator := Aggregator(calculatorA, calculatorB)
+	Printer(calculator)
+}
+```
+上述数据流系统如下图所示。
+
+![](https://go101.org/article/res/data-flow-dag.png)
+
+更复杂的数据流拓扑可以是任意的图形。例如，数据流系统可具有多个最终输出。但是具有循环图拓扑的数据流系统在现实中很少使用。
+
+从上面的两个例子中，我们可以发现使用通道构建数据流系统非常容易和直观。
+
+从上一个例子中，我们可以发现，在一个数据系统中，如果我们聚合模块中所有工作者的相应的输出流，然后我们可以使用聚合结果流作为下一个模块中所有工作者的相应输入流。通过这种方式，可以轻松地为指定的模块实现扇入和扇出功能。
+
+以上对数据流系统的解释对如何关闭数据流没有太多考虑。请阅读[这篇文章](https://go101.org/article/channel-closing.html)，了解如何优雅地关闭频道。
