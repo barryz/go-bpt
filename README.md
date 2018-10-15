@@ -1,4 +1,4 @@
-go101-trans
+__go-bpt__
 
-Chinese translations of Golang related blogs or posts.
+Chinese translations of Golang related blogs or postes.
 
