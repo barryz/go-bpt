@@ -199,3 +199,177 @@ func f() {
 这里，对于第三个Goroutine，是和通道`c`的操作不相关的。我们无法保证它遵守前两个新创建的goroutines观察到的顺序。所以，这里面四个`panic`中任何一个都有可能被执行到。
 
 实际上，大多数编译器的实现确实保证了上面例子中四个`panic`调用永远不会被执行，但是，没有一个Go的官方文档会做这样的保证。所以上述例子中的代码并不是跨编译器或跨编译器版本兼容的。我们应该坚持使用Go官方文档来编写专业的Go代码。
+
+这里是一个使用无冲通道的例子：
+
+```go
+func f() {
+	var k, l, m, n, x, y int
+	c := make(chan bool, 2)
+
+	go func() {
+		k = 1
+		c <- true
+		l = 1
+		c <- true
+		m = 1
+		c <- true
+		n = 1
+	}()
+
+	go func() {
+		x = 1
+		<-c
+		y = 1
+	}()
+}
+```
+
+将会有下面的顺序保证：
+
+- `k = 1`的执行将发生在`y = 1`执行之前。
+- `x =1`的执行发生在`n = 1`执行之前。
+
+`x = 1`的执行不保证在`l = 1`和`m = 1`执行之前发生。并且`l = 1`和`m = 1`的执行也不保证在`y = 1`执行之前发生。
+
+下面是一个关于通道关闭的例子。在这个例子中，`k = 1`的执行将被保证发生在`y = 1`执行之前，但不保证发生在`x = 1`执行之前。
+
+```go
+func f() {
+	var k, x, y int
+	c := make(chan bool, 1)
+
+	go func() {
+		c <- true
+		k = 1
+		close(c)
+	}()
+
+	go func() {
+		<-c
+		x = 1
+		<-c
+		y = 1
+	}()
+}
+```
+
+### 互斥相关的顺序保证
+
+下面是Go中关于互斥量相关的一些顺序保证。
+
+1. 对一个类型为`Mutex`或`RWMutex`的可寻址的值`l`来说，第**n**个`l.Unlock()`方法的成功调用发生在第(**n+1**)个`l.Lock()`方法的调用成功返回之前。
+2. 对一个类型为`RWMutex`的可寻址的值`l`来说，如果一个`l.Lock()`方法的调用成功返回，那么下一个`l.Unlock()`方法的成功调用将发生在任意`l.RLock()`方法的调用未开始或未返回之前。
+3. 对一个类型为`RWMutex`的可寻址的值`l`来说，如果第**n**个`l.Lock()`方法的调用成功返回，那么第**m**个`l.RUnlock()`方法调用的成功发生在当`m <= n`时，任意`l.Lock()`方法调用未开始或未返回之前。
+
+在下面的例子中，将会有如下的顺序保证：
+
+- `a = 1`的执行将发生在`b = 1`执行之前。
+- `m = 1`的执行将发生在`n = 1`执行之前。
+- `x = 1`的执行将发生在`y = 1`执行之前。
+
+```go
+func fab() {
+	var a, b int
+	var l sync.RWMutex
+
+	l.Lock()
+	go func() {
+		l.Lock()
+		b = 1
+		l.Unlock()
+	}()
+	go func() {
+		a = 1
+		l.Unlock()
+	}()
+}
+
+func fmn() {
+	var m, n int
+	var l sync.RWMutex
+
+	l.RLock()
+	go func() {
+		l.Lock()
+		n = 1
+		l.Unlock()
+	}()
+	go func() {
+		m = 1
+		l.RUnlock()
+	}()
+}
+
+func fxy() {
+	var x, y int
+	var l sync.RWMutex
+
+	l.Lock()
+	go func() {
+		l.RLock()
+		y = 1
+		l.RUnlock()
+	}()
+	go func() {
+		x = 1
+		l.Unlock()
+	}()
+}
+```
+
+### 由`sync.WaitGroup`值产生的顺序保证
+
+假设在给定的时间，由一个`sync.WaitGroup`类型的可寻址的值`wg`维护的计数器是非零的，然后在给定的时间之后，一个`wg.Add`（或`wg.Done`）方法调用和一个`wg.Wait`方法调用都发生了。只要我们能确认这个计数器在`wg.Add`（或`wg.Done`）方法调用返回之前绝不会变成零，那么`wg.Add`（或`wg.Done`）方法调用将会被保证在给定的时间之后任何`wg.Wait`方法调用返回之前发生。
+
+请阅读[the explanations for sync.WaitGroup](https://go101.org/article/concurrent-synchronization-more.html#waitgroup)来学习如何使用`sync.WaitGroup`的值。
+
+### 由`sync.Once`值产生的顺序保证
+
+对于一个`sync.Once`类型的可寻址的值`o`来说，在所有`o.Do`调用之间，只存在一个函数会被调用。这个被调用的参数函数被保证了将在任何`o.Do`方法调用返回之前返回。换句话说，被调用的参数函数的代码将被保证先于任何`o.Do`方法调用返回之前执行。
+
+请阅读[the explanations for sync.Once](https://go101.org/article/concurrent-synchronization-more.html#once)来学习如何使用`sync.Once`的值。
+
+### 由`sync.Cond`值产生的顺序保证
+
+由一个`sync.Cond`类型的可寻址的值`c`产生的顺序保证事实上很难有一个较为清晰的描述。简单的说，如果一个`c.Wait()`调用被保证由`c.Notify`（或`c.Broadcast`）调用所恢复，那么`c.Notify`（或`c.Broadcast`）调用将被保证在`c.Wait()`调用返回之前发生。
+
+请阅读[the explanations for sync.Cond](https://go101.org/article/concurrent-synchronization-more.html#cond)来学习如何使用`sync.Cond`的值。
+
+### 原子相关的顺序保证
+
+上面所有我们提到的同步技术都做了一些内存顺序保证。这些保证在各类的Go官方文档中都有出现。然而，没有任何Go官方文档提到说对原子操作有内存顺序保证。
+
+实际上，在标准的Go编译器实现中，至少是Go1.11的SDK，原子操作确实有一些内存顺序保证。标准Go运行时广泛地依赖于原子操作提供的保证。例如，下面的程序会始终打印出`1`，如果是使用标准Go编译器编译的话。
+
+```go
+package main
+
+import "fmt"
+import "sync/atomic"
+import "runtime"
+
+func main() {
+	var a, b int32 = 0, 0
+
+	go func() {
+		atomic.StoreInt32(&a, 1)
+		atomic.StoreInt32(&b, 1)
+	}()
+
+	for {
+		if n := atomic.LoadInt32(&b); n == 1 {
+			// The following line always prints 1.
+			fmt.Println(atomic.LoadInt32(&a))
+			break
+		}
+		runtime.Gosched()
+	}
+}
+```
+
+这里，主Goroutine将始终观察到`a`的修改操作会发生在`b`修改操作之前。
+
+但是，由原子操作产生的顺序保证并没有写进Go规范和其他官方Go文档中。如果你想要编写跨编译器和跨编译器版本兼容的Go代码，我给出的安全建议是， **不要依赖于通用Go编程中的原子操作来保证内存顺序**。
+
+请阅读[this artcle](https://go101.org/article/concurrent-atomic-operation.html)来学习如何进行原子操作。
