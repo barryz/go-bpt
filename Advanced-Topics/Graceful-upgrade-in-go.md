@@ -1,3 +1,5 @@
+> 译自：[Graceful Upgrades In Go](https://blog.cloudflare.com/graceful-upgrades-in-go/)
+
 # Go中的优雅升级
 
 优化升级背后的想法是在进程运行过程中，在用户无感知的情况下对程序的配置和代码进行更换(升级)。尽管这听起来很危险、容易出错、不可取，并且像是一个馊主意 - 事实上我(的想法)和你一样。 但是，有些时候你的确需要它们。这通常在一个没有负载均衡层的环境中会遇到这种问题。我们在*Cloudfare*也遇到了这种情况，这使得我们必须研究这类问题、并尝试、实现各类的解决方案。
@@ -191,13 +193,3 @@ server.Shutdown(context.TODO())
 `Upgrader.Fds.Listen`的灵感来自于`facebookgo/grace`，它可以轻松继承`net.Listener`。事实上在后台实现中，`Fds`确保了未被使用的继承套接字会被清除。这里也包括了*UNIX*套接字，因为[UnlinkOnClose](https://golang.org/pkg/net/#UnixListener.SetUnlinkOnClose)而变得棘手。如果你愿意的话，你也可以直接将`*os.File`对象传递给新进程。
 
 最后，`Upgrader.Ready`会清理未使用的文件描述符并通知父进程初始化工作已经完成。此时，父进程可以安全退出。至此，正常的优化升级的周期结束。
-
----
-
-via: https://blog.cloudflare.com/graceful-upgrades-in-go/
-
-作者：[Lorenz Bauer](https://blog.cloudflare.com/author/lorenz-bauer/)
-译者：[译者ID](https://github.com/barryz)
-校对：[校对者ID](https://github.com/校对者ID)
-
-本文由 [GCTT](https://github.com/studygolang/GCTT) 原创编译，[Go 中文网](https://studygolang.com/) 荣誉推出

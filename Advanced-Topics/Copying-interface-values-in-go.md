@@ -1,3 +1,4 @@
+> 译自：[Copying Interface Values In Go](https://www.ardanlabs.com/blog/2016/05/copying-interface-values-in-go.html)
 
 # Go中接口值的复制
 
@@ -151,13 +152,3 @@
 ### 结论
 
 我允许自己对Go在创建一个接口值的拷贝时，只存储值而不是指针的情况感到困惑。有那么一瞬间，我想知道接口值的每个副本是否也创建了接口引用的值的副本。因为我们“存储”了一个值而不是一个指针。但我们现在学到的是，由于地址始终会被存储起来，因此它是被复制的地址，而不是值的本身。
-
----
-
-via: [https://www.ardanlabs.com/blog/2016/05/copying-interface-values-in-go.html](https://www.ardanlabs.com/blog/2016/05/copying-interface-values-in-go.html)
-
-作者：[William Kennedy](https://github.com/ardanlabs/gotraining)
-译者：[barryz](https://github.com/barryz)
-校对：[校对者ID](https://github.com/校对者ID)
-
-本文由 [GCTT](https://github.com/studygolang/GCTT) 原创编译，[Go 中文网](https://studygolang.com/) 荣誉推出
