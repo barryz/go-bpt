@@ -1,3 +1,5 @@
+> 译自：[Object Lifecycle/](https://middlemost.com/object-lifecycle/)
+
 # Go中的对象的生命周期
 
 尽管Go语言很简单，Go的开发人员仍然发现了许多创建和使用Go中对象的方法。在本篇博客中，我们将介绍对象管理的三步法 - ***实例化， 初始化，以及启动***。我们还会将其与其他的创建、使用对象的方法进行对比，并审查（评估）每种方法的优缺点。
@@ -292,14 +294,3 @@ func NewConfig() Config {
 首先，我们 ***实例化*** 对象以分配内存并设置默认值。接下来，我们通过自定义的可导出字段来 ***初始化*** 对象。
 最后，我们 ***启动***  启动可能会有后台goroutines或连接的对象。
 这种简单的三步法有助于构建开发人员能够轻松使用的代码，并且可以交由未来的开发人员维护。
-
-----------------
-
-via: [https://middlemost.com/object-lifecycle/](https://middlemost.com/object-lifecycle/)
-
-作者：[Ben Johnson](https://twitter.com/benbjohnson)
-译者：[barryz](https://github.com/barryz)
-校对：[校对者ID](https://github.comjjjj/校对者ID)
-
-本文由 [GCTT](https://github.com/studygolang/GCTT) 原创编译，
-[Go 中文网](https://studygolang.com/) 荣誉推出
