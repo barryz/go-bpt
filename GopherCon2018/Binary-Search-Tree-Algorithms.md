@@ -1,6 +1,5 @@
 > 译自：[ Demystifying Binary Search Tree Algorithms](https://about.sourcegraph.com/go/gophercon-2018-binary-search-tree-algorithms)。
 
-
 # 揭开二分搜索树的神秘面纱
 
 学习算法常常令人感到困惑和沮丧，但实际并不一定如此。在本次演讲中，*Kaylyn* 将使用Go代码以一种简单直接的方法来解释二分搜索树的算法。
@@ -154,7 +153,6 @@ func (n *Node) Search(key int) bool {
 
 上面👆的GIF图片展示了如何将`81`插入到树中。插入操作和搜索操作很类似。我们想要找到`81`在树中对应的位置，那么我们应该使用`search`中一样的方法来遍历树，一旦我们发现一个空白点，我们就插入`81`。
 
-
 ```go
 func (n *Node) Insert(key int) {
     if n.Key < key {
@@ -188,7 +186,7 @@ func (n *Node) Delete(key int) *Node {
     if n.Key < key {
         n.Right = n.Right.Delete(key)
     } else if n.Key > key {
-        n.Left = n.Left.Delete(key)   
+        n.Left = n.Left.Delete(key)
     // n.Key == `key`
     } else {
         if n.Left == nil { // just point to opposite node
@@ -325,7 +323,6 @@ BenchmarkSearch-4       1000000000               2.84 ns/op
 
 - 如果二分搜索树过大/过深会发生什么？
 - 如果更改了需要搜索的key会发生什么？
-
 
 *Kaylyn* 发现基准测试特别有助于理解map和切片之间的性能特征。它比你从网上搜索的各种文档来的更加快速，直观。
 

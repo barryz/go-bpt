@@ -43,7 +43,6 @@ func main() {
 
 但是，即使有一个简单的用来关闭通道的函数`closed(chan T) bool`，那它的用处也十分有限，就像内建函数`len`用来检查存储在可缓冲通道的当前值的个数。原因就是当这样的函数返回结果时，被检查的通道的状态可能已经发生改变。如果调用`closed(ch)`返回`true`，则可以停止向该通道`ch`发送值，但如果调用`closed(ch)`返回`false`，则关闭通道或继续向通道发送值是不安全的。
 
-
 ## 通道关闭的原则
 
 使用Go通道时一个通用的原则就是 ___不要在接收端关闭通道，不要在通道拥有多个并发发送者的情况下关闭通道___。换言之，如果发送者是该通道的唯一发送者，那么你应该只关闭该发送者goroutine中的通道。
@@ -130,7 +129,7 @@ func main() {
 				// The only sender can close the channel safely.
 				close(dataCh)
 				return
-			} else {			
+			} else {
 				dataCh <- value
 			}
 		}

@@ -1,6 +1,5 @@
 > 译自： [Arrays, Slice And Maps in Go](https://go101.org/article/container.html)
 
-
 # Go中的数组、切片和Map
 
 严格来说， Go中有三种"一等公民"的容器类型。 它们分别是数组、切片和map。某些时候，字符串和channel也被当作容器类型，但是这篇文章不会涉及这两种类型。本篇文章提到的容器类型只会是上面列举的三种。
@@ -38,7 +37,6 @@
 - `T`是任意类型。它定义了容器内元素的类型。只能将指定元素类型的值存储为容器类型元素的值。
 - `N`必须是一个非负整数。它定义了数组类型只能存储多少个元素，所以也称之为为数组长度。这说明长度也是数组类型的一部分。比如， `[5]int`和`[8]int`就是两种不同的数组类型。
 - `K`是任意可比较的类型。它定义了Map类型的Key的类型。Go中大多数的类型都是可比较的，不可比较的类型可见[列表](https://go101.org/article/type-system-overview.html#types-not-support-comparison)。
-
 
 例子：
 
@@ -136,7 +134,6 @@ var _ = [5]int{a: 100} // error: index must be non-negative integer constant
 当一个数组变量被声明但却未指定初始值时，那么将会为数组元素的零值分配内存。但是， 对于`nil`的切片和Map来说， 内存却还未分配。
 
 需要注意的是， `[]T{}`表示的是一个空切片类型，基于类型`[]T`，它和`[]T{nil}`是不同的。`map[K]T{}`和`map[K]T{nil}`同理。
-
 
 ## 复合字面量不可寻址但可以拥有地址
 
@@ -260,7 +257,6 @@ var _ = map[LangCategory]map[string]int{
 
 需要注意的是， 上述的例子中， 每个复合字面量中最后一项的逗号不能省略。 更多的内容可以参考： [the line break rules in Go](https://go101.org/article/line-break-rules.html)。
 
-
 ## 比较容器的值
 
 正如之前文章[overview of Go type system](https://go101.org/article/type-system-overview.html#types-not-support-comparison)中提过的那样，map和切片类型是不可比较的类型。所以map和切片不能当作map的key。
@@ -322,7 +318,6 @@ func main() {
 - 如果`v[k]`被用作赋值操作中的源值，不会发生panic，尽管`v`是一个`nil`map。
 
 - 如果`v[k]`被用作赋值操作中的源值且map`v`中没有key这个entry， 那么`v[k]`将会得到map`v`中元素类型的零值。对于大多数的场景来说，`v[k]`被视为单值表达式。 然而， 当`v[k]`被用作赋值操作中的源值时，它则会被视为一个多值表达式，并会产生第二个可选的无类型的bool值， 用来表示map`v`是否含有key`k`相关联的实体。
-
 
 例子：
 
@@ -447,7 +442,6 @@ type _slice struct {
 
 像之前图片描述的slice一样。从`len`索引开始到`cap`索引之间的元素是不属于该切片的。它们仅仅是一些冗余的元素槽（redundant element slots)。对于上述图片上的切片来说，它们可能属于其他切片或者另一个数组。
 
-
 `append`函数调用时：
 
 - 如果追加的元素数大于基础切片的冗余元素槽的数量，一个全新的底层内存段将会被分配给结果切片。因此结果切片和基础切片不会共享任何元素。
@@ -460,7 +454,6 @@ type _slice struct {
 
 注意，通常来说，我们无法单独地去修改切片中这三个字段，除非通过[relection](https://go101.org/article/container.html#modify-slice-length-and-capacity)和[unsafe](https://go101.org/article/unsafe.html)这两种方式。换句话说，通常，想要修改一个切片值， 它的三个字段会被一起修改。通常，这是通过将另一个切片值（相同切片类型）复制/分配给需要修改的切片来实现的。
 
-
 ## 追加和删除容器元素
 
 将键值对（也称为条目entry）追加到map的语法与修改map元素的语法相同。例如，对于`non-nil`map值`m`， 下面的代码：
@@ -470,7 +463,6 @@ m[k] = e
 ```
 
 将会将键值对`(k, e)`放到map`m`中， 如果`m`中不含有跟key`k`相关的条目。 如果`m`中含有跟key`k`相关的条目，那么该操作只是修改key`k`关联的值。
-
 
 map的底层连续的内存段可能需要重新分配来容纳更多的元素。
 
@@ -549,7 +541,6 @@ s4 := append(s0, s0[0], s0[1], s0[2])
 
 ![](https://go101.org/article/res/slice-append.png)
 
-
 到Go目前的版本（1.10）为止， `append`函数的第一个参数不能为`nil`。
 
 ## 使用内建函数`make`来创建切片和map
@@ -557,7 +548,6 @@ s4 := append(s0, s0[0], s0[1], s0[2])
 除了使用复合字面量来创建map和切片以外，我们也可以使用内建函数`make`来创建它们。内建函数`make`不能用于创建数组类型。
 
 **（内建函数`make`同样可以用来创建channels， 这将会在之后的文章[channels in Go](https://go101.org/article/channel.html)中详细阐述。）**
-
 
 假设`M`是一个map类型， `n`是一个非负整数，我们可以使用以下两种方式来创建一个新的map类型`M`。 第一种形式创建一个新的空map，分配了足够的空间来容纳N个元素。第二种形式只接受一个参数，在这种情况下， 分配一个具有足够空间来容纳少量元素的新空map。这里的少量依赖于具体的编译器实现。
 
@@ -627,7 +617,6 @@ func main() {
 ```
 
 在创建容器类型时，复合字面量以及内建函数`make`比内建函数`new`更加流行。
-
 
 ## 容器元素的可寻址性
 
@@ -754,7 +743,6 @@ baseContainer[low : high : cap(baseContainer)]
 
 - `low <= len(baseContainer)`
 
-
 索引如果不满足上述条件可能导致程序在编译器或运行时发生panic或错误， 这里也取决于基础容器的类型以及索引是否是常量。
 
 注意：
@@ -819,7 +807,6 @@ func main() {
 
 从上图中我们可以看到`s7`和`s8`被一个不同于其他的底层内存段托管。其他切片的元素被同一个底层内存段`a`托管。
 
-
 ## 使用内建函数`copy`拷贝切片的元素
 
 我们可以使用内建函数`copy`将一个切片的元素拷贝到另一个切片，这两个切片的类型不要求相同， 但是他们的元素类型必须是相同的。换句话说，`copy`函数的两个切片参数必须共享同一个底层类型。`copy`函数的第一个参数是目的切片， 第二个参数是源切片。这两个切片参数可以有元素重叠。`copy`函数返回被拷贝的元素个数， 这个数将是两个切片参数中长度较小的一个。
@@ -874,7 +861,6 @@ func Copy(dest, src []T) int {
 
 到Go1.10为止，`copy`函数的两个参数都不能为`nil`。
 
-
 ## 容器类型的元素迭代
 
 在Go中， 可以使用`range`语法来迭代容器类型的元素：
@@ -883,7 +869,7 @@ func Copy(dest, src []T) int {
 for key, element = range aContainer {
 	// use key and element ...
 }
-```  
+```
 
 这里的`key`和`element`被称作迭代变量。
 
@@ -990,9 +976,9 @@ for key, element = range aContainer {...}
 
 1. 被迭代的容器是`aContainer`的拷贝。然而，需要注意的是，只有`aContainer`的[直接部分](https://go101.org/article/value-part.html#about-value-copy)被[拷贝](https://go101.org/article/value-part.html#about-value-copy)。这个被拷贝的容器时匿名的，所以无法修改它。
 
-    - 如果`aContainer`是一个数组，那么在迭代期间对于数组元素的修改不会反映到迭代变量中来。原因是数组的拷贝不与源数组共享元素。
+    1. 如果`aContainer`是一个数组，那么在迭代期间对于数组元素的修改不会反映到迭代变量中来。原因是数组的拷贝不与源数组共享元素。
 
-    - 如果`aContainer`是一个切片或者map，那么迭代期间对元素的修改会反映到迭代变量中来。 原因是切片（或map）的拷贝会和源切片（或map）共享所有的元素（条目）。
+    2. 如果`aContainer`是一个切片或者map，那么迭代期间对元素的修改会反映到迭代变量中来。 原因是切片（或map）的拷贝会和源切片（或map）共享所有的元素（条目）。
 
 2. `aContainer`的拷贝的键值对将会在每一次迭代时被分配（拷贝）到迭代变量中，所以修改迭代变量的**直接部分**不会反映到存储在`aContainer`中的元素中。
 
@@ -1212,7 +1198,6 @@ func main() {
 
 我们也可以将数组指针作为参数传递给内建函数`len`和`cap`。 传递`nil`数组指给这两个函数不会产生panic。
 
-
 ## `memclr`优化
 
 假设`t0`是类型`T`零值的字面量表示，并且`a`是一个元素类型为`T`的数组，那么Go编译器会将下面的单一迭代变量`for-range`循环代码块：
@@ -1236,7 +1221,6 @@ for i := range s {
 ```
 
 这么建议的原因是因为可能其他的Go编译器可能不进行上述优化，并且正如上说提到的，迭代一个数组将会产生一个数组的拷贝。
-
 
 ## 对内建函数`len`和`cap`的调用可能会在编译期间被求值
 
@@ -1290,7 +1274,6 @@ func main() {
 
 反射操作是非常低效的， 甚至比切片分配赋值操作还慢。
 
-
 ## 切片的其他操作
 
 Go内建方法中不支持切片其他的操作，比如切片克隆， 元素删除和插入。 但我们可以组合各种内建方法来完成这些操作。
@@ -1310,7 +1293,7 @@ sClone := append(s[:0:0], s...)
 ```go
 sClone := make([]T, len(s))
 copy(sClone, s)
-```  
+```
 
 第二种方式不如第一种方式完美，如果`s`是一个`nil`切片，那第二种会导致一个非零切片克隆。
 

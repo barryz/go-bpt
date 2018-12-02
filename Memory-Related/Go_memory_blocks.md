@@ -9,47 +9,43 @@ Go语言内置了自动内存管理， 比如内存分配和垃圾回收。 所�
 
 本文将尝试解释Go语言中内存块(memory block) 的在Go标准编译器和运行时的分配，垃圾回收等一些概念和细节。
 
-
 ## Go 内存块(memory block)
 
 内存块是用于在运行时管理值的一个连续的内存段(segment)。 不同的内存块可以大小不同， 用来管理不同的值。 一个内存块可以同时管理多个值的部分， 但每个值只能被一个内存块管理，无论该值的大小有多大。换言之， 对于任意的值部分， 都不可能跨越内存块存储。
 
 有几个原因会导致内存块管理多个值部分：
 
-  - 结构体(struct)值通常会有若干个字段， 因此当为结构体值分配内存块时， 内存块也将管理这些字段值。
+- 结构体(struct)值通常会有若干个字段， 因此当为结构体值分配内存块时， 内存块也将管理这些字段值。
 
-  - 数组(array)值通常会有若干个元素， 因此当为数组值分配内存块时， 内存块也将管理这些元素值。
+- 数组(array)值通常会有若干个元素， 因此当为数组值分配内存块时， 内存块也将管理这些元素值。
 
-  - 两个切片(slice)共享一个底层数组(array)， 那么他们将被同一个内存块管理， 这两个切片的元素序列甚至可以彼此重叠。
-
+- 两个切片(slice)共享一个底层数组(array)， 那么他们将被同一个内存块管理， 这两个切片的元素序列甚至可以彼此重叠。
 
 ## 内存块管理的值部分的引用
 
 如果一个值部分`v`由另一个值部分引用， 那么另一个值也将间接引用管理`v`的内存块。
 
-
 ## 什么时候会分配内存块？
 
 在Go里， 以下情况会导致内存块的分配：
 
-  - 显式调用内建函数： `new` 和 `make`。 `make` 函数调用将会分配多个内存块用来管理创建的 map，slice， channel值的直接或者间接的部分。
+- 显式调用内建函数： `new` 和 `make`。 `make` 函数调用将会分配多个内存块用来管理创建的 map，slice， channel值的直接或者间接的部分。
 
-  - 使用相应的字面量创建map， slice， 或者匿名函数。 每个操作上会分配多个内存块。
+- 使用相应的字面量创建map， slice， 或者匿名函数。 每个操作上会分配多个内存块。
 
-  - 变量声明。 取决于变量的值类型， 可以在每次声明中分配单个或者多个内存块。
+- 变量声明。 取决于变量的值类型， 可以在每次声明中分配单个或者多个内存块。
 
-  - 为接口值分配非接口值时（当非接口值不是指针值时）。
+- 为接口值分配非接口值时（当非接口值不是指针值时）。
 
-  - 字符串拼接。
+- 字符串拼接。
 
-  - 字符串转换成byte或rune切片时，反之亦然(vice versa)。
+- 字符串转换成byte或rune切片时，反之亦然(vice versa)。
 
-  - 整型转换成`string`
+- 整型转换成`string`
 
-  - `append`内建函数调用（当声明时的slice容量不足时）。
+- `append`内建函数调用（当声明时的slice容量不足时）。
 
-  - `map`中添加新的key-value时（因为需要调整基础hash table大小）。
-
+- `map`中添加新的key-value时（因为需要调整基础hash table大小）。
 
 ## 内存块具体分配到什么地方？
 
@@ -62,7 +58,6 @@ Go语言内置了自动内存管理， 比如内存分配和垃圾回收。 所�
 堆(Heap)是每个程序的单例。 分配在堆上的内存块可以被多个goroutine访问。 换言之， 这些内存块可以被并发地访问。它们在并发访问时可能需要同步。
 
 堆是注册内存块的相对保守的地方。 如果编译器检测到内存块被多个goroutine引用或者不能确认内存块是否可以安全地放在栈上， 那么内存块会在运行时被分配到堆上。 这就意味着可以在栈上安全地分配一些值， 也可以在堆上分配一些值。
-
 
 实际上， 栈对于Go程序来说，并不是必不可少地。 Go的编译器和运行时可以将所有的内存块都分配到堆上。 栈的支持仅仅是为了提高Go程序的运行效率：
 
@@ -78,21 +73,19 @@ Go语言内置了自动内存管理， 比如内存分配和垃圾回收。 所�
 
 当类型为`T`的局部变量逃逸到堆上时， 这也意味着Go运行时还会在当前的goroutine的栈上创建类型为`*T`的隐式指针。 指针的值存储了分配到堆上的内存块的地址（也就是 类型为`T`的局部变量的地址）。 Go编译器已经在编译时将对变量的所有引用替换成为该指针值的反引用。
 
-包级别的全局变量永远不会在栈上分配内存块。 它们是否在堆上分配内存块依赖于编译器的具体实现。 `A value part referenced by the direct part of any global variable and any value part allocated on heap will be allocated on heap if the value part is not the direct part of a global variable. Direct parts of global variables and value parts allocated on heap will never reference value parts allocated on stacks. Value parts allocated on a stack can only be referenced by value parts allocated on the same stack. `
+包级别的全局变量永远不会在栈上分配内存块。 它们是否在堆上分配内存块依赖于编译器的具体实现。 *A value part referenced by the direct part of any global variable and any value part allocated on heap will be allocated on heap if the value part is not the direct part of a global variable. Direct parts of global variables and value parts allocated on heap will never reference value parts allocated on stacks. Value parts allocated on a stack can only be referenced by value parts allocated on the same stack.*
 
 一些例子：
 
- - 如果结构体的字段值逃逸到了堆上，那么整个结构体的值也会逃逸到堆上。
+- 如果结构体的字段值逃逸到了堆上，那么整个结构体的值也会逃逸到堆上。
 
- - 如果数组的元素的值逃逸到了堆上， 那么整个数组的值也会逃逸到堆上。
+- 如果数组的元素的值逃逸到了堆上， 那么整个数组的值也会逃逸到堆上。
 
- - 如果切片的元素的值逃逸到了堆上， 那么整个切片的所有元素也会逃逸到堆上。
+- 如果切片的元素的值逃逸到了堆上， 那么整个切片的所有元素也会逃逸到堆上。
 
- - 如果一个非`nil`的切片逃逸到堆上， 则其元素也将逃逸到堆上。
-
+- 如果一个非`nil`的切片逃逸到堆上， 则其元素也将逃逸到堆上。
 
 另外通过`new`函数既可以在堆上也可以在栈上分配内存块， 这与C++里面的new不同。
-
 
 ## 什么时候内存块会被回收？
 

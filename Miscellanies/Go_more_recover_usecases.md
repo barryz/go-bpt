@@ -103,7 +103,7 @@ func main() { // depth 0
 		func() { // depth 1
 		}()
 
-		defer func() { // depth 1		
+		defer func() { // depth 1
 			defer func() { // depth 2
 			}()
 		}()

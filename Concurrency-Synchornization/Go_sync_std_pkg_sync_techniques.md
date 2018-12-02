@@ -8,7 +8,6 @@
 
 ___（请注意，为了避免一些异常的行为，最好不要拷贝`sync`标准库中的类型的值。）___
 
-
 ## 类型`sync.WaitGroup`
 
 每个`sync.WaitGroup`值内部都维护了一个计数器。该计数器的默认值是零。
@@ -296,7 +295,6 @@ func main() {
 ```
 
 上面的例子中，文本`Hi`将被保证在文本`Bye.`打印之前被打印。关于`sync.Mutex`和`sync.RWMutex`值所做的内存顺序保证，请阅读[memory order guarantees in Go](https://go101.org/article/memory-model.html#mutex)。
-
 
 ## 类型`sync.Cond`
 

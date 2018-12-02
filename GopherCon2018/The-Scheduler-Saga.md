@@ -1,4 +1,4 @@
-> 译自： (The Scheduler Saga)[https://about.sourcegraph.com/go/gophercon-2018-the-scheduler-saga]。
+> 译自： [The Scheduler Saga](https://about.sourcegraph.com/go/gophercon-2018-the-scheduler-saga)。
 
 # 调度器的冒险故事
 
@@ -87,7 +87,6 @@ func process(image) {
 - FIFO类型的运行队列 --> goroutines没有优先级的概念（这和linux内核不同）
 - 没有健壮的抢占式调度 --> 没有强大的公平性或延迟保证。最近的提案或许有解决方案。
 - 不了解系统的架构（拓扑结构） --> 并不是真正的本地调度器。曾有一个旧的NUMA感知调度器的提议。也有建议使用LIFO队列的，以便更有可能在该CPU核心缓存中缓存数据。
-
 
 ### 附件
 

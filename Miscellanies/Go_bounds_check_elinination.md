@@ -1,5 +1,7 @@
 > 译自：[Bounds Check Elimination](https://go101.org/article/bounds-check-elimination.html)。
 
+# Go边界检查
+
 从Go1.7开始，标准Go编译器使用了一个新的编译器后端，它基于静态单一分配形式（SSA)。SSA使得Go编译器通过[边界检查清除BCE](https://en.wikipedia.org/wiki/Bounds-checking_elimination)和[通用子表达式清除CSE](https://en.wikipedia.org/wiki/Common_subexpression_elimination)的优化来生成更加高效的代码。
 
 本文将展示BCE是如何在Go1.7之后的编译器上工作的。

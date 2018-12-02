@@ -24,7 +24,7 @@ Go调度器的设计和行为是你的多线程Go程序更加高效。这要归�
 
 [程序计数器(PC)](https://en.wikipedia.org/wiki/Program_counter)，有时候也被称作指令指针(IP)，被用来允许线程可以追踪下一条要执行的指令。在大多数的核心中，PC指向下一条执行而不是当前的指令。
 
-#### 插图1
+### 插图1
 
 ![](https://www.ardanlabs.com/images/goinggo/92_figure1.jpeg)
 
@@ -32,7 +32,7 @@ Go调度器的设计和行为是你的多线程Go程序更加高效。这要归�
 
 如果你曾经看过Go程序的堆栈追踪，你可能已经注意到每行末尾的这些小十六进制数字。在清单1中查找`+0x39`和`+0x72`。
 
-#### 清单1
+### 清单1
 
 ```bash
 goroutine 1 [running]:
@@ -59,7 +59,7 @@ https://github.com/ardanlabs/gotraining/blob/master/topics/go/profiling/stack_tr
 ```
 十六进制数`+0x39`表示`example`函数内的指令的PC偏移量，该指令比函数的起始指令低了57（基数10）个字节。在下面的列表3中，你可以从`example`函数的二进制中查看`objdump`信息。找到第12条指令，在底部显示的。表明了该指令上方的代码行是对`panic`的调用。
 
-#### 清单3
+### 清单3
 
 ```bash
 $ go tool objdump -S -s "main.example" ./example1
@@ -140,16 +140,15 @@ __IO密集型__： 这类工作将会导致线程进入等待状态。这类工�
 
 从主内存访问数据有很高的延迟开销（大约100到300个时钟周期），处理器和核心具有本地高速缓存以使数据保持接近需要它的硬件线程。从高速缓存中访问数据的成本要低得多（大约3到40个时钟周期），具体时钟周期取决于所访问的高速缓存。今天，性能的一个方面时关于如何有效地将数据导入到处理器以减少这些数据的访问延迟。编写能够改变状态的多线程应用程序需要考虑缓存系统的机制。
 
-#### 插图2
+### 插图2
 
 ![](https://www.ardanlabs.com/images/goinggo/92_figure2.png)
-
 
 处理和主内存之间的数据交换使用[缓存行](https://www.youtube.com/watch?v=WDIkqP4JbkE)。高速缓存行的在主内存和高速缓存系统之间交换的64字节内存卡。每个核心都有自己需要的任何缓存行的副本，这意味着硬件使用[值语义](https://www.ardanlabs.com/blog/2017/06/design-philosophy-on-data-and-semantics.html)。这就是为什么多线程应用程序在内存中突变会造成性能噩梦的原因。
 
 当并行运行的多个线程访问相同的数据值或者甚至是彼此相邻的数据值时，他们将访问同一缓存行上的数据。在任何核心上运行的任何线程都将获得自己的同一缓存行的副本。
 
-#### 插图3
+### 插图3
 
 ![](https://www.ardanlabs.com/images/goinggo/92_figure3.png)
 

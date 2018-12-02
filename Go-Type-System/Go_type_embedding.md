@@ -1,6 +1,5 @@
 > 译自：[Type Embedding](https://go101.org/article/type-embedding.html)。
 
-
 # 类型嵌套
 
 从文章[structs in Go](https://go101.org/article/struct.html)中，我们知道结构体可以有很多个字段。每个字段由一个字段名称和字段类型组成。实际上，有时候，一个字段可以只由一个字段类型构成。这样的字段被称为**嵌套字段**。有些文章会将嵌套字段称为匿名字段。

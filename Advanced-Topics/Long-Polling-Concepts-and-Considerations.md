@@ -64,7 +64,6 @@
 
 一个Go语言实现的长轮询功能较为良好的库。
 
-
 ```go
 import  "github.com/jcuga/golongpoll"
 
@@ -86,7 +85,6 @@ http.HandleFunc("/events", manager.SubscriptionHandler)
 
 http.ListenAndServe("127.0.0.1:8081", nil)
 ```
-
 
 你可以从[GitHub仓库](https://github.com/jcuga/golongpoll)中找到有关此库的更多信息。
 
@@ -110,18 +108,17 @@ http.ListenAndServe("127.0.0.1:8081", nil)
 
 ## 引用和延伸阅读
 
-
 本文译自：[Long Polling Concepts and Considerations](https://www.ably.io/concepts/long-polling)
 
-*   [WebSockets – A Conceptual Deep-Dive](https://www.ably.io/documentation/concepts/websockets)
+- [WebSockets – A Conceptual Deep-Dive](https://www.ably.io/documentation/concepts/websockets)
 
-*  [IETF: Known Issues and Best Practices for the Use of Long Polling and Streaming in Bidirectional HTTP](https://tools.ietf.org/id/draft-loreto-http-bidirectional-07.html)
+- [IETF: Known Issues and Best Practices for the Use of Long Polling and Streaming in Bidirectional HTTP](https://tools.ietf.org/id/draft-loreto-http-bidirectional-07.html)
 
-*   [The Myth of Long Polling](https://blog.baasil.io/why-you-shouldnt-use-long-polling-fallbacks-for-websockets-c1fff32a064a)
+- [The Myth of Long Polling](https://blog.baasil.io/why-you-shouldnt-use-long-polling-fallbacks-for-websockets-c1fff32a064a)
 
-*   [HTML5 WebSocket: A Quantum Leap in Scalability for the Web](http://websocket.org/quantum.html)
+- [HTML5 WebSocket: A Quantum Leap in Scalability for the Web](http://websocket.org/quantum.html)
 
-*   [Wikipedia: Push Technology](https://en.wikipedia.org/wiki/Push_technology#Long_polling)
+- [Wikipedia: Push Technology](https://en.wikipedia.org/wiki/Push_technology#Long_polling)
 
 
 

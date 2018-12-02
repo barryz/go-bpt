@@ -1,8 +1,6 @@
 > 译自：[Some Simple Summaries](https://go101.org/article/summaries.html)。
 
-
 # 简单总结
-
 
 ## 哪些类型的值可能有间接底层类型？
 
@@ -27,11 +25,9 @@
 |map|Yes| Yes| | Yes| Yes|
 |channel|Yes| Yes|Yes | | Yes|
 
-
 上述中的各个类型都可以使用`for-range`循环结构。
 
 值能够使用内建函数`len`的类型被称为容器类型。
-
 
 ## 内建容器类型的比较
 
@@ -76,7 +72,6 @@
 
 类型零值的大小和该类型其他值的大小相同。
 
-
 ## 可以为其声明方法的类型有哪些？
 
 请阅读[本文](https://go101.org/article/unofficial-faq.html#types-can-have-methods)获取详情。
@@ -84,7 +79,6 @@
 ## 可以匿名嵌入其他类型的类型有哪些？
 
 请阅读[这篇文章](https://go101.org/article/type-embedding.html#embeddable-types)获取详情。
-
 
 ## 哪些函数的调用可以在编译期被求值？
 
@@ -131,7 +125,6 @@
     - 子字符串操作
     - 子切片操作
     - 加减乘除等算术运算操作
-
 
 _请注意，在Go中有个语法糖，`&T{}`。实际上它是`tmp := T{}; (&tmp)`的缩写形式，所以`&T{}`合法并不意味着复合字面值`T{}`是可寻址的。_
 

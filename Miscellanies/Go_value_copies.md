@@ -2,13 +2,11 @@
 
 Go的程序里会频繁地发生值拷贝的现象. 其中值赋值, 参数传递, channel的发送和接受值都会涉及到值赋值.
 
-
 ## 值大小(size)
 
 值的大小意味着该值直接占用内存的字节数, 值的间接底层的部分不会影响值的大小.
 
 在Go里面, 如果两个值的类型(type)属于同一个类型([kind](https://go101.org/article/type-system-overview.html#type-kinds)), 并且如果这个类型(type)的种类(kind)不是string kind, interface kind,  array kind 和 struct kind, 那么这两个值的大小永远相等.
-
 
 实际上, 对于标准的Go编译器来说, 两个string的值的大小也是恒等的. 两个interface的值也是恒等的.
 
@@ -125,8 +123,6 @@ ok      test    4.470s
 ```
 
 很明显, 两次迭代中进行元素赋值比其他两个慢了非常多.
-
-
 
 ----
 

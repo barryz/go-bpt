@@ -144,7 +144,6 @@ func main() {
 
 也有其他的方式来实现**first-reponse-win**用例，比如通过使用`select`机制配合一个容量为1的缓冲通道。下面将会介绍这种方式。
 
-
 ### 更多请求-响应的变体
 
 参数或者返回值通道可以是缓冲的，以便响应方不需要等待请求方取出被传输的值。
@@ -628,7 +627,6 @@ func main() {
 
 顺便说下，也有[some other ways](https://go101.org/article/summaries.html#block-forever)来使一个goroutine进入永久阻塞状态，但是`select{}`是最简单的一个。
 
-
 ## 尝试发送和尝试接收
 
 在Go中，有一个`default`分支和只有一个`case`分支的选择块被称作一个尝试发送或尝试接收的通道操作，接收或发送取决于跟在`case`关键字后面的语句是一个接收操作还是一个发送操作。
@@ -707,7 +705,6 @@ func IsClosed(c chan T) bool {
 ```
 
 用这种方式来检查一个无缓冲通道是否关闭在Go的并发编程实践中很流行。
-
 
 ### 峰值限制
 
@@ -804,7 +801,6 @@ func main() {
 ```
 
 上面介绍的两种方式以及最后子小节的方式同样也可以用作N(1)-to-1通知。
-
 
 ### 超时
 
@@ -974,7 +970,6 @@ func main() {
 我们可以使用`reflect`标准库中的一些函数在运行时构造一个`select`代码块。这个动态创建的`select`代码块可以拥有任意多个`case`分支。但是请注意，反射的方式相较于常规的方式是十分低效的。
 
 `reflect`标准库同样提供了`TrySend`和`TryRecv`函数来实现one-case-plus-default `select`代码块。
-
 
 ## 数据流操作
 
