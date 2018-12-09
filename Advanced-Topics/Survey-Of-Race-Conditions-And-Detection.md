@@ -1,3 +1,5 @@
+> 译自：[Race-condition-detection](https://medium.com/dm03514-tech-blog/golang-candidates-and-contexts-a-heuristic-approach-to-race-condition-detection-e2b230e70d08).
+
 # Golang: 竞态条件的调查和检测
 
 ## Go中的并发
@@ -5,7 +7,7 @@
 Go提供了绝对会令人称奇的并发原语，真正地实现了将并发当作一等公民。
 不幸的是，确保并发的正确性需要结合很多不同的技术，以便于最小化发生并发相关错误的可能性。
 这些技术中大多数都不是自动产生的（由编译器完成的），并且很大程度上依赖于开发人员的经验。
-同事，我还发现，如果没有在某些时候遇到过这些常见的并发问题，通常来说是很难对这些问题进行推理的。
+同时，我还发现，如果没有在某些时候遇到过这些常见的并发问题，通常来说是很难对这些问题进行推理的。
 对于我参与过的很多组织而言，这可能会导致经验不足的工程师更有可能引入并发相关的错误。
 
 这篇文章将会介绍竞态条件，并且介绍为什么并发编程会这么困难。然后，本文将会介绍如何调查、检测和预防Go中竞态条件，
@@ -27,7 +29,7 @@ Go提供了绝对会令人称奇的并发原语，真正地实现了将并发当
 
 ### [竞态条件](https://en.wikipedia.org/wiki/Race_condition#Software)
 
-当两个线程同时访问某块内存，且其中一个线程是写入操作，我们即能称之为竞态条件。竞态条件产生的根本原因就是不同步的访问*共享*内存。
+当两个线程同时访问某块内存，且其中一个线程是写入操作，我们即能称之为竞态条件。竞态条件产生的根本原因就是不同步的访问*共享*内存。
 
 #### 显式的非同步内存访问
 
@@ -46,7 +48,7 @@ http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 log.Fatal(http.ListenAndServe(":8080", nil))
 ```
 
-当负载([源码](https://github.com/dm03514/grokking-go/blob/83cf3d8313a7c797c317d7b5b2d85b4df89a0401/candidates-and-contexts/races/explict_test.go#L22))增加时，上述代码中的竞态条件就会出现。
+当负载([源码](https://github.com/dm03514/grokking-go/blob/83cf3d8313a7c797c317d7b5b2d85b4df89a0401/candidates-and-contexts/races/explict_test.go#L22))增加时，上述代码中的竞态条件就会出现。
 下面的测试用例使用了200个Goroutines模拟了200个请求。我们期待的是每当一个请求进来时，计数器都会递增，但最终结果却不是这样：
 
 ```bash
@@ -83,7 +85,7 @@ FAIL
 FAIL    github.com/dm03514/grokking-go/candidates-and-contexts/races    0.083s
 ```
 
-如图所示，交错执行的步骤产生了一个错误的结果。
+如图所示，交错执行的步骤产生了一个错误的结果。
 
 ![pic1](https://cdn-images-1.medium.com/max/800/1*Bkpqr91IgLk7HZZ_LEOq0Q.png)
 
@@ -93,7 +95,7 @@ FAIL    github.com/dm03514/grokking-go/candidates-and-contexts/races    0.083s
 value := reqCount.Value()
 ```
 
-然后这些Goroutines开始一些模拟工作：
+然后这些Goroutines开始一些模拟工作：
 
 ```bash
 time.Sleep(1 * time.Nanosecond)
@@ -105,7 +107,7 @@ time.Sleep(1 * time.Nanosecond)
 reqCount.Set(value + 1)
 ```
 
-这里的问题就在于多个Goroutines在修改同一个值！在上图中，有两个Goroutine都写入了值1，但实际上应该是1+1。
+这里的问题就在于多个Goroutines在修改同一个值！在上图中，有两个Goroutine都写入了值1，但实际上应该是1+1。
 
 在显式竞争的情况下，我们在同一时间内对同一块内存分别执行读取和写入的操作：
 
@@ -226,7 +228,7 @@ Previous read at 0x00c4200164e8 by goroutine 426:
       /vagrant_data/go/src/github.com/dm03514/grokking-go/candidates-and-contexts/races/counters.go:14 +0x5b
 ```
 
-这些日志表明了测试中存在并发的读写：
+这些日志表明了测试中存在并发的读写：
 
 ```go
 package races
@@ -286,7 +288,7 @@ func (c *SynchronizedCounter) Set(v int) {
 
 ### 静态分析 （通过`go vet`)
 
-静态分析（特别是互斥量检测）有助于检测互斥量的滥用，是另一种提供给我们的被动检测工具。它并不能帮助我们直接检测一变量是否需要互斥锁，它只能检测出互斥锁是否被正确地使用。它要求工程师能够识别哪里需要互斥量，并在恰当的位置使用它，通常来说我们应该使用互斥量的副本，而非互斥量的引用以避免产生误用。
+静态分析（特别是互斥量检测）有助于检测互斥量的滥用，是另一种提供给我们的被动检测工具。它并不能帮助我们直接检测一变量是否需要互斥锁，它只能检测出互斥锁是否被正确地使用。它要求工程师能够识别哪里需要互斥量，并在恰当的位置使用它，通常来说我们应该使用互斥量的副本，而非互斥量的引用以避免产生误用。
 
 ```go
 type MisSynchronizedCounter struct {
@@ -492,12 +494,3 @@ log.Fatal(http.ListenAndServe(":8080", nil))
 
 即使我们已经有了Go提供的并发问题解决方案，但我仍然发现，若想要确保Go中并发地运行正确的程序，仍然需要进行安全细致的分析工作。我觉得这反映了并发编程的状态还不够成熟。我个人非常希望看到Go能够提供更好用的竞态条件分析和检测工具。Go已经成为我个人比较喜爱的工具，并且在性能、并发性、简单性和速度之间取得了平衡，这是我使用过的任何工具所不能及的。但是，如果这样的特性被内置并被Go的编译器支持时，想想未来，这绝对是一件令人兴奋的事情!
 
----
-
-via: [Race-condition-detection](https://medium.com/dm03514-tech-blog/golang-candidates-and-contexts-a-heuristic-approach-to-race-condition-detection-e2b230e70d08)
-
-作者：[dm03514](https://medium.com/@dm03514)
-译者：[barryz](https://github.com/barryz)
-校对：[校对者ID](https://github.com/校对者ID)
-
-本文由 [GCTT](https://github.com/studygolang/GCTT) 原创编译，[Go 中文网](https://studygolang.com/) 荣誉推出
